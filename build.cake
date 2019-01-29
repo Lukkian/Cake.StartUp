@@ -1,8 +1,10 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.4.0
 //#addin nuget:?package=Cake.ClickTwice
-#addin nuget:?package=Cake.Powershell&version=0.4.7
-#r "C:\Users\lukia\source\repos\Cake\ClickTwice\artifacts\lib\Cake.ClickTwice\Cake.ClickTwice.dll"
-#r "C:\Users\lukia\source\repos\Cake\ClickTwice\artifacts\lib\Cake.ClickTwice\ClickTwice.Handlers.AppDetailsPage.dll"
+//#addin nuget:?package=Cake.Powershell&version=0.4.7
+#r "tools/lib/Cake.ClickTwice/Release/net45/Cake.ClickTwice.dll"
+#r "tools/lib/Cake.ClickTwice/Release/net45/ClickTwice.Handlers.AppDetailsPage.dll"
+// To debug in dotnet core, otherwise use: #addin nuget:?package=Cake.Powershell&version=0.4.7
+#r "tools/lib/Cake.Core.Powershell/Release/netcoreapp2.1/Cake.Core.Powershell.dll"
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
