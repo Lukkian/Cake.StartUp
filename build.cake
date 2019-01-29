@@ -1,14 +1,16 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.4.0
 //#addin nuget:?package=Cake.ClickTwice
 #addin nuget:?package=Cake.Powershell&version=0.4.7
-#r "C:\Users\lukia\source\repos\Cake\ClickTwice\src\Cake.ClickTwice\bin\Debug\Cake.ClickTwice.dll"
-#r "C:\Users\lukia\source\repos\Cake\ClickTwice\src\Cake.ClickTwice\bin\Debug\ClickTwice.Handlers.AppDetailsPage.dll"
+#r "C:\Users\lukia\source\repos\Cake\ClickTwice\artifacts\lib\Cake.ClickTwice\Cake.ClickTwice.dll"
+#r "C:\Users\lukia\source\repos\Cake\ClickTwice\artifacts\lib\Cake.ClickTwice\ClickTwice.Handlers.AppDetailsPage.dll"
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
 //////////////////////////////////////////////////////////////////////
 
 var version = Argument("version", "1.0.0");
+var freezeversion = Argument("freezeversion", "true");
+
 
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
@@ -63,13 +65,18 @@ Setup(ctx =>
     var currentVersion = new Version(previousVersion.Major, previousVersion.Minor, previousVersion.Build + 1);
 
     var versionArg = new Version(version);
+    
     if(versionArg > currentVersion)
         currentVersion = versionArg;
+
+    if(freezeversion == "true")
+        currentVersion = new Version(versionArg.Major, versionArg.Minor, versionArg.Build);
+
     version = currentVersion.ToString();
 
     Information($"Current version: {currentVersion}");
 
-    XmlPoke(propsFile, "//ApplicationRevision", currentVersion.Revision.ToString());
+    XmlPoke(propsFile, "//ApplicationRevision", "0");
     XmlPoke(propsFile, "//ApplicationVersion", currentVersion.ToString());
 
     var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1);
