@@ -62,9 +62,9 @@ Setup(ctx =>
 	Information($"Main project {mainprojectpath}");
 
     // Versioning
-    var propsFile = "./src/ClickOnce.props";
+    var propsFile = "./publish.props";
     if (FileExists(propsFile) == false)
-        throw new Exception("Build aborted: file ClickOnce.props not found!");
+        throw new Exception("Build aborted: file publish.props not found!");
     Information($"ClickOnce props file: {propsFile}");
 
     var storedVersion = XmlPeek(propsFile, "//ApplicationVersion");
