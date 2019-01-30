@@ -1,12 +1,17 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.4.0
 //#addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
-//#addin nuget:?package=Cake.Powershell&version=0.4.7
+#addin nuget:?package=Cake.Powershell&version=0.4.7
 
 // To support ClickOnce and Cake 0.32.1, otherwise use: #addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
 #addin nuget:?package=Lukkian.Cake.ClickTwice&version=0.1.2
 
 // To debug in dotnet core [preliminar support], otherwise use: #addin nuget:?package=Cake.Powershell&version=0.4.7
-#addin nuget:?package=Lukkian.Cake.Powershell&version=0.4.9
+//#addin nuget:?package=Lukkian.Cake.Powershell&version=0.4.9
+
+// To debug in VSCode uncomment below lines
+// #r ".\tools\Addins\Lukkian.Cake.ClickTwice.0.1.2\lib\net45\Cake.ClickTwice.dll"
+// #r ".\tools\Addins\Lukkian.Cake.ClickTwice.0.1.2\lib\net45\ClickTwice.Handlers.AppDetailsPage.dll"
+// #r ".\tools\Addins\Lukkian.Cake.Powershell.0.4.9\lib\netcoreapp2.1\Cake.Core.Powershell.dll"
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
@@ -66,7 +71,7 @@ Setup(ctx =>
     var previousVersion = new Version(storedVersion);
     Information($"Previous version: {previousVersion}");
 
-    var currentVersion = new Version(previousVersion.Major, previousVersion.Minor, previousVersion.Build + 1);
+    var currentVersion = new Version(previousVersion.Major, previousVersion.Minor, previousVersion.Build + 1, 0);
 
     var versionArg = new Version(version);
     
@@ -74,7 +79,7 @@ Setup(ctx =>
         currentVersion = versionArg;
 
     if(freezeversion == "true")
-        currentVersion = new Version(versionArg.Major, versionArg.Minor, versionArg.Build);
+        currentVersion = new Version(versionArg.Major, versionArg.Minor, versionArg.Build, 0);
 
     version = currentVersion.ToString();
 
@@ -83,12 +88,12 @@ Setup(ctx =>
     XmlPoke(propsFile, "//ApplicationRevision", "0");
     XmlPoke(propsFile, "//ApplicationVersion", currentVersion.ToString());
 
-    var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1);
+    var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1, 0);
     Information($"Next version: {nextVersion}");
 
     // Change the version of ClickOnce in the project file, without this change the package will generate the wrong version.
     Information("Patching project file with new version number...");
-    XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationVersion", $"{version}.0",
+    XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationVersion", version,
         new XmlPokeSettings { Namespaces = new Dictionary<string, string> {
             { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
         }
@@ -97,7 +102,7 @@ Setup(ctx =>
 
     Information("Patching AssemblyInfo with new version number...");
     // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
-    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", $"{version}.0"); });
+    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", version); });
     Information($"AssemblyInfo version patched to: {version}.0");
 });
 
