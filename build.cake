@@ -1,4 +1,4 @@
-#tool nuget:?package=NUnit.ConsoleRunner&version=3.4.0
+#tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
 //#addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
 #addin nuget:?package=Cake.Powershell&version=0.4.7
 
@@ -20,7 +20,6 @@
 var version = Argument("version", "1.0.0");
 var freezeversion = Argument("freezeversion", "true");
 
-
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
 
@@ -30,7 +29,7 @@ var target = Argument("target", "Default");
 
 var solution = "Example";
 var mainproject = "WindowsFormsApp";
-var testtarget = "*.Tests";
+var testtarget = "*tests";
 var artifacts = "./artifacts/";
 var mainprojectpath = $"./src/{mainproject}/{mainproject}.csproj";
 var solutionpath = $"./src/{solution}.sln";
@@ -58,8 +57,11 @@ Setup(ctx =>
 {
     // Executed BEFORE the first task.
     Information("Running tasks...");
-	Information($"Building for soulution {solutionpath}");
-	Information($"Main project {mainprojectpath}");
+	Information($"Solution: {solutionpath}");
+	Information($"Main project: {mainprojectpath}");
+    Information($"Mode: {configuration}");
+    
+    Information("Revision number will always be ignored and reset to zero.");
 
     // Versioning
     var propsFile = "./publish.props";
@@ -79,7 +81,10 @@ Setup(ctx =>
         currentVersion = versionArg;
 
     if(freezeversion == "true")
-        currentVersion = new Version(versionArg.Major, versionArg.Minor, versionArg.Build, 0);
+    {
+        Information($"Version number is in freeze mode: {previousVersion}");
+        currentVersion = previousVersion;
+    }
 
     version = currentVersion.ToString();
 
@@ -103,12 +108,12 @@ Setup(ctx =>
             { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
         }
     });
-    Information($"\r\rProject file version patched to: {version}.0");
+    Information($"\r\rProject file version patched to: {version}");
 
     Information("Patching AssemblyInfo with new version number...");
     // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
     StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", version); });
-    Information($"AssemblyInfo version patched to: {version}.0");
+    Information($"AssemblyInfo version patched to: {version}");
 });
 
 Teardown(ctx =>
@@ -184,8 +189,7 @@ Task("Run-Unit-Tests")
     .IsDependentOn("Build")
     .Does(() =>
 {
-    Information($"Running test for {testtarget}.dll");
-    Information($"Mode: {configuration}");
+    Information($"Pattern: {testtarget}");
     NUnit3($"./src/**/bin/{configuration}/{testtarget}.dll", new NUnit3Settings { NoResults = true });
 });
 
@@ -193,14 +197,12 @@ Task("Publish-ClickOnce")
     .IsDependentOn("Run-Unit-Tests")
     .Does(() =>
 {
-    Information("Publish ClickOnce...");
-    Information($"Mode: {configuration}");
     PublishApp(mainprojectpath)
     	.SetConfiguration(configuration)
-        //.ForceRebuild()
         //.SetBuildPlatform(MSBuildPlatform.x86)
         //.SetBuildPlatform(MSBuildPlatform.x64)
         //.SetBuildPlatform(MSBuildPlatform.AnyCPU)
+        //.ForceRebuild()
         //.DoNotBuild()
         .ThrowOnHandlerFailure()
         .WithVersion(version)
