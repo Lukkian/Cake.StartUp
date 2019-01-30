@@ -27,7 +27,7 @@
     <ProductName>Default Product Name</ProductName>
     <PublisherName>Default Publisher Name</PublisherName>
     <SuiteName>Default Suite Name</SuiteName>
-    <ApplicationRevision>1</ApplicationRevision>
+    <ApplicationRevision>0</ApplicationRevision>
     <ApplicationVersion>1.0.0.0</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>

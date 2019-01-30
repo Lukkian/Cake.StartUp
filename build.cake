@@ -98,6 +98,11 @@ Setup(ctx =>
             { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
         }
     });
+    XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationRevision", "0",
+        new XmlPokeSettings { Namespaces = new Dictionary<string, string> {
+            { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
+        }
+    });
     Information($"\r\rProject file version patched to: {version}.0");
 
     Information("Patching AssemblyInfo with new version number...");
