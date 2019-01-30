@@ -1,10 +1,12 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.4.0
-//#addin nuget:?package=Cake.ClickTwice
+//#addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
 //#addin nuget:?package=Cake.Powershell&version=0.4.7
-#r "tools/lib/Cake.ClickTwice/Release/net45/Cake.ClickTwice.dll"
-#r "tools/lib/Cake.ClickTwice/Release/net45/ClickTwice.Handlers.AppDetailsPage.dll"
-// To debug in dotnet core, otherwise use: #addin nuget:?package=Cake.Powershell&version=0.4.7
-#r "tools/lib/Cake.Core.Powershell/Release/netcoreapp2.1/Cake.Core.Powershell.dll"
+
+// To support ClickOnce and Cake 0.32.1, otherwise use: #addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
+#addin nuget:?package=Lukkian.Cake.ClickTwice&version=0.1.2
+
+// To debug in dotnet core [preliminar support], otherwise use: #addin nuget:?package=Cake.Powershell&version=0.4.7
+#addin nuget:?package=Lukkian.Cake.Powershell&version=0.4.9
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
@@ -157,16 +159,14 @@ Task("Build")
       // Use MSBuild
       MSBuild(solutionpath, settings =>
         settings.SetConfiguration(configuration)
-        //.SetVerbosity(Verbosity.Diagnostic)
-        .SetVerbosity(Verbosity.Quiet));
+        .SetVerbosity(Verbosity.Minimal));
     }
     else
     {
       // Use XBuild
       XBuild(solutionpath, settings =>
         settings.SetConfiguration(configuration)
-        //.SetVerbosity(Verbosity.Diagnostic)
-        .SetVerbosity(Verbosity.Quiet));
+        .SetVerbosity(Verbosity.Minimal));
     }
 });
 
