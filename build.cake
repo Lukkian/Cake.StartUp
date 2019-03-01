@@ -34,10 +34,11 @@ var target = Argument("target", "Default");
 var solution = "Example";
 var mainproject = "WindowsFormsApp";
 var testtarget = "*tests";
-var artifacts = "./artifacts/";
+var artifacts = "./artifacts";
 var mainprojectpath = $"./src/{mainproject}/{mainproject}.csproj";
 var solutionpath = $"./src/{solution}.sln";
 var publishpath = $"./{artifacts}/publish";
+var nugetVersion = version;
 
 //////////////////////////////////////////////////////////////////////
 // PREPARATION
@@ -91,6 +92,7 @@ Setup(ctx =>
     }
 
     version = currentVersion.ToString();
+    nugetVersion = $"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
 
     Information($"Current version: {currentVersion}");
 
@@ -197,12 +199,46 @@ Task("Run-Unit-Tests")
     NUnit3($"./src/**/bin/{configuration}/{testtarget}.dll", new NUnit3Settings { NoResults = true });
 });
 
-Task("Squirrel")
+Task("Create-NuGet-Package")
     .IsDependentOn("Run-Unit-Tests")
+    .Does(() =>
+{
+    var nuGetPackSettings   = new NuGetPackSettings {
+        Id                      = "SquirrelCakeStartUp",
+        Version                 = nugetVersion,
+        Title                   = "Squirrel Cake StartUp",
+        Authors                 = new[] {"Lukkian"},
+        Description             = "My package description.",
+        IconUrl                 = new Uri("file:///" + MakeAbsolute(File($"./src/{mainproject}/cake.ico")).FullPath),
+        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", version},
+        Files                   = new [] {
+                                    new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "DeltaCompressionDotNet.PatchApi.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "Mono.Cecil.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "Mono.Cecil.Mdb.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "Mono.Cecil.Pdb.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "Mono.Cecil.Rocks.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "NuGet.Squirrel.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "SharpCompress.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "Splat.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = "Squirrel.dll", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = $"{mainproject}.exe", Target = @"lib\net45"},
+                                    new NuSpecContent {Source = $"{mainproject}.exe.config", Target = @"lib\net45"},
+                                },
+        BasePath                = $"./src/{mainproject}/bin/release",
+        OutputDirectory         = $"{artifacts}/nuget"
+    };
+
+    NuGetPack($"./src/{mainproject}/SquirrelCakeStartUp.nuspec", nuGetPackSettings);
+});
+
+Task("Squirrel")
+    .IsDependentOn("Create-NuGet-Package")
 	.Does(() => 
 {
-    Squirrel(File("./src/SquirrelCakeStartUp.1.0.17.nupkg"));
-    Information("Squirrel package created on folder ./Releases/");
+    Squirrel(File($"{artifacts}/nuget/SquirrelCakeStartUp.{nugetVersion}.nupkg"));
+    Information($"Squirrel package for version {nugetVersion} created on folder ./Releases/");
 });
 
 Task("Publish-ClickOnce")

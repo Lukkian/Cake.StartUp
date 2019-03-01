@@ -33,7 +33,7 @@ namespace WindowsFormsApp
         {
             versionLabel.Text += "\nChecking for updates...";
 
-            var di = new DirectoryInfo(@"C:\Users\lukia\source\repos\Cake\Cake.StartUp\src\Releases");
+            var di = new DirectoryInfo(@"C:\source\repos\Cake\Cake.StartUp\Releases");
 
             if (!di.Exists)
             {
