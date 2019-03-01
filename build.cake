@@ -2,6 +2,10 @@
 //#addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
 #addin nuget:?package=Cake.Powershell&version=0.4.7
 
+// Squirrel: It's like ClickOnce but Works
+#tool nuget:?package=squirrel.windows&version=1.9.1
+#addin nuget:?package=Cake.Squirrel&version=0.14.0
+
 // To support ClickOnce and Cake 0.32.1, otherwise use: #addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
 #addin nuget:?package=Lukkian.Cake.ClickTwice&version=0.1.2
 
@@ -193,8 +197,16 @@ Task("Run-Unit-Tests")
     NUnit3($"./src/**/bin/{configuration}/{testtarget}.dll", new NUnit3Settings { NoResults = true });
 });
 
-Task("Publish-ClickOnce")
+Task("Squirrel")
     .IsDependentOn("Run-Unit-Tests")
+	.Does(() => 
+{
+    Squirrel(File("./src/SquirrelCakeStartUp.1.0.17.nupkg"));
+    Information("Squirrel package created on folder ./Releases/");
+});
+
+Task("Publish-ClickOnce")
+    .IsDependentOn("Squirrel")
     .Does(() =>
 {
     PublishApp(mainprojectpath)
