@@ -1,11 +1,9 @@
-﻿using System;
+﻿using Squirrel;
+using System;
 using System.Diagnostics;
-using Squirrel;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -24,33 +22,42 @@ namespace WindowsFormsApp
         private void CheckForUpdates()
         {
 #if !DEBUG
-            var context = SynchronizationContext.Current;
-            Task.Run(async () => await CheckForUpdatesAsync(this));
+            try
+            {
+                Task.Run(async () => await CheckForUpdatesAsync(this));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
 #endif
         }
 
+        // ReSharper disable once UnusedMember.Local
         private async Task CheckForUpdatesAsync(Form form)
         {
-            versionLabel.Text += "\nChecking for updates...";
+            versionLabel.Text += "\nContacting update server...";
 
-            var di = new DirectoryInfo(@"C:\source\repos\Cake\Cake.StartUp\Releases");
+            //var di = new DirectoryInfo(@"C:\source\repos\Cake\Cake.StartUp\Releases");
 
-            if (!di.Exists)
+            //if (!di.Exists)
+            //{
+            //    versionLabel.Text += $"\nDirectory not found: {di.FullName}";
+            //    return;
+            //}
+
+            //var fi = new FileInfo(Path.Combine(di.FullName, "RELEASES"));
+
+            //if (!fi.Exists)
+            //{
+            //    versionLabel.Text += $"\nFile not found: {fi.FullName}";
+            //    return;
+            //}
+
+            const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
+            using (var manager = await UpdateManager.GitHubUpdateManager(updateUrl))
             {
-                versionLabel.Text += $"\nDirectory not found: {di.FullName}";
-                return;
-            }
-
-            var fi = new FileInfo(Path.Combine(di.FullName, "RELEASES"));
-
-            if (!fi.Exists)
-            {
-                versionLabel.Text += $"\nFile not found: {fi.FullName}";
-                return;
-            }
-
-            using (var manager = new UpdateManager(di.FullName))
-            {
+                versionLabel.Text += "\nChecking for updates...";
                 var updateInfo = await manager.CheckForUpdate();
 
                 // Check for Squirrel application update
@@ -66,7 +73,7 @@ namespace WindowsFormsApp
                     foreach (var releaseEntry in updateInfo.ReleasesToApply)
                     {
                         releaseNotes.AppendLine($"\n\nVersion: {releaseEntry.Version}");
-                        releaseNotes.AppendLine(releaseEntry.GetReleaseNotes(di.FullName)
+                        releaseNotes.AppendLine(releaseEntry.GetReleaseNotes(updateUrl)
                             .Replace("<![CDATA[", "")
                             .Replace("<p>", "")
                             .Replace("</p>", "")
