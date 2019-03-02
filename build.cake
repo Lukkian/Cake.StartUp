@@ -22,7 +22,7 @@
 //////////////////////////////////////////////////////////////////////
 
 var version = Argument("version", "1.0.0");
-var freezeversion = Argument("freezeversion", "true");
+var forceversion = Argument("forceversion", false);
 
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
@@ -69,12 +69,12 @@ Setup(ctx =>
     Information("Revision number will always be ignored and reset to zero.");
 
     // Versioning
-    var propsFile = "./publish.props";
-    if (FileExists(propsFile) == false)
+    var publishFile = "./publish.props";
+    if (FileExists(publishFile) == false)
         throw new Exception("Build aborted: file publish.props not found!");
-    Information($"ClickOnce props file: {propsFile}");
+    Information($"ClickOnce props file: {publishFile}");
 
-    var storedVersion = XmlPeek(propsFile, "//ApplicationVersion");
+    var storedVersion = XmlPeek(publishFile, "//ApplicationVersion");
     var previousVersion = new Version(storedVersion);
     Information($"Previous version: {previousVersion}");
 
@@ -82,27 +82,37 @@ Setup(ctx =>
 
     var versionArg = new Version(version);
     
-    if(versionArg > currentVersion)
-        currentVersion = versionArg;
-
-    if(freezeversion == "true")
+    if(versionArg > currentVersion || forceversion)
     {
-        Information($"Version number is in freeze mode: {previousVersion}");
-        currentVersion = previousVersion;
+        currentVersion = versionArg;
     }
+    else
+    {
+        Warning($"Version arg: {version} is smaller than the current version: {currentVersion}");
+    }
+
+    if(currentVersion.Major < 1) { currentVersion = new Version($"1.{currentVersion.Minor}.{currentVersion.Build}.{currentVersion.Revision}"); }
+    if(currentVersion.Minor < 0) { currentVersion = new Version($"{currentVersion.Major}.0.{currentVersion.Build}.{currentVersion.Revision}"); }
+    if(currentVersion.Build < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.0.{currentVersion.Revision}"); }
+    if(currentVersion.Revision < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}.0"); }
 
     version = currentVersion.ToString();
     nugetVersion = $"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
 
-    Information($"Current version: {currentVersion}");
+    Information($"Current version: {currentVersion} (forced: {forceversion})");
 
-    XmlPoke(propsFile, "//ApplicationRevision", "0");
-    XmlPoke(propsFile, "//ApplicationVersion", currentVersion.ToString());
+    XmlPoke(publishFile, "//ApplicationRevision", "0");
+    XmlPoke(publishFile, "//ApplicationVersion", currentVersion.ToString());
 
     var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1, 0);
     Information($"Next version: {nextVersion}");
 
-    // Change the version of ClickOnce in the project file, without this change the package will generate the wrong version.
+    // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
+    Information("Patching AssemblyInfo with new version number...");
+    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", version); });
+    Information($"AssemblyInfo version patched to: {version}");
+
+    // Change the version of ClickOnce in the project file, without this change the package will generate the wrong version
     Information("Patching project file with new version number...");
     XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationVersion", version,
         new XmlPokeSettings { Namespaces = new Dictionary<string, string> {
@@ -115,32 +125,12 @@ Setup(ctx =>
         }
     });
     Information($"\r\rProject file version patched to: {version}");
-
-    Information("Patching AssemblyInfo with new version number...");
-    // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
-    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", version); });
-    Information($"AssemblyInfo version patched to: {version}");
 });
 
 Teardown(ctx =>
 {
     // Executed AFTER the last task.
     Information("Finished running tasks.");
-
-    version = "1.0.0.0";
-    Information($"Reseting version number to: {version}");
-
-    // Reseting the version of ClickOnce in the project file
-    XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationVersion", version,
-        new XmlPokeSettings { Namespaces = new Dictionary<string, string> {
-            { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
-        }
-    });
-    Information("Project version reseted");
-
-    // Restore the default version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
-    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", version); });
-    Information("AssemblyInfo version reseted");
 });
 
 //////////////////////////////////////////////////////////////////////
