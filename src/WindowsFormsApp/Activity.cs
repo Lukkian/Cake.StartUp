@@ -8,19 +8,20 @@ namespace WindowsFormsApp
     {
         private CancellationTokenSource _tokenSource;
         private Task<T> _task;
-        private const int Defaulttimeout = 1000;
-        private int _timeout = Defaulttimeout;
+        private TimeSpan _timeout = TimeSpan.FromSeconds(10);
 
-        public void Setup(Task<T> task, int timeout = Defaulttimeout)
+        public void Setup(Task<T> task, CancellationTokenSource cancellationTokenSource = null, TimeSpan timeout = default)
         {
+            _tokenSource = cancellationTokenSource;
             _task = task;
-            _timeout = timeout;
+            _timeout = timeout != default ? timeout : _timeout;
         }
 
         public async Task<T> Run()
         {
-            _tokenSource = new CancellationTokenSource();
-            var run = Task.Run(() => _task, _tokenSource.Token); // Execute a long running process
+            _tokenSource = _tokenSource ?? new CancellationTokenSource();
+            //var run = Task.Run(() => _task, _tokenSource.Token); // Execute a long running process
+            var run = _task;
 
             // Check the task is delaying
             if (await Task.WhenAny(run, Task.Delay(_timeout)) == run)
@@ -34,15 +35,20 @@ namespace WindowsFormsApp
                 // Cancel the task
                 _tokenSource.Cancel();
 
-                Console.WriteLine("Time Out. Aborting Task");
+                Console.WriteLine("Time Out. Aborting Task!");
+            }
 
-                // throw OperationCanceledException
+            // Throw error if the task was cancelled
+            if (_tokenSource.IsCancellationRequested)
+            {
                 _tokenSource.Token.ThrowIfCancellationRequested();
             }
 
             // Consider that the task may have faulted or been canceled.
             // We re-await the task so that any exceptions/cancellation is rethrown.
-            return await run;
+            var result = await run;
+
+            return result;
         }
 
         public Activity<T> ForTask(Task<T> task)
@@ -51,9 +57,15 @@ namespace WindowsFormsApp
             return this;
         }
 
-        public Activity<T> Wait(int timeout)
+        public Activity<T> Wait(TimeSpan timeout)
         {
             _timeout = timeout;
+            return this;
+        }
+
+        public Activity<T> WithToken(CancellationTokenSource token)
+        {
+            _tokenSource = token;
             return this;
         }
     }

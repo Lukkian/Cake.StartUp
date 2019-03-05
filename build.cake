@@ -18,12 +18,21 @@
 // #r ".\tools\Addins\Lukkian.Cake.Powershell.0.4.9\lib\netcoreapp2.1\Cake.Core.Powershell.dll"
 
 //////////////////////////////////////////////////////////////////////
+// Fetch the most recent bootstrapper file from the resources repository using:
+//////////////////////////////////////////////////////////////////////
+
+// Invoke-WebRequest https://cakebuild.net/download/bootstrapper/windows -OutFile build.ps1
+
+//////////////////////////////////////////////////////////////////////
 // ARGUMENTS
 //////////////////////////////////////////////////////////////////////
 
-var version = Argument("version", "1.0.0");
-var forceversion = Argument("forceversion", false);
+//.\build.ps1 --appversion="1.0.0"
+//.\build.ps1 --appversion="1.0.0" --forceversion=true
 
+const string defaultVersion = "1.0.0";
+var appversion = Argument("appversion", defaultVersion);
+var forceversion = Argument("forceversion", false);
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
 
@@ -31,6 +40,7 @@ var target = Argument("target", "Default");
 // VARIABLES
 //////////////////////////////////////////////////////////////////////
 
+var version = appversion;
 var solution = "Example";
 var mainproject = "WindowsFormsApp";
 var testtarget = "*tests";
@@ -66,6 +76,11 @@ Setup(ctx =>
 	Information($"Main project: {mainprojectpath}");
     Information($"Mode: {configuration}");
     
+    if(forceversion || version != defaultVersion)
+    {
+        Warning($"AppVersion: {version} (forced: {forceversion})");
+    }
+
     Information("Revision number will always be ignored and reset to zero.");
 
     // Versioning
@@ -82,19 +97,20 @@ Setup(ctx =>
 
     var versionArg = new Version(version);
     
-    if(versionArg > currentVersion || forceversion)
+    if(forceversion || versionArg > currentVersion)
     {
         currentVersion = versionArg;
-    }
-    else
-    {
-        Warning($"Version arg: {version} is smaller than the current version: {currentVersion}");
     }
 
     if(currentVersion.Major < 1) { currentVersion = new Version($"1.{currentVersion.Minor}.{currentVersion.Build}.{currentVersion.Revision}"); }
     if(currentVersion.Minor < 0) { currentVersion = new Version($"{currentVersion.Major}.0.{currentVersion.Build}.{currentVersion.Revision}"); }
     if(currentVersion.Build < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.0.{currentVersion.Revision}"); }
     if(currentVersion.Revision < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}.0"); }
+
+    if(currentVersion <= previousVersion)
+    {
+        Warning($"Next version: {currentVersion} is smaller or equal to the previous version: {previousVersion}");
+    }
 
     version = currentVersion.ToString();
     nugetVersion = $"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
@@ -149,6 +165,8 @@ Task("Clean")
     }
     Information($"Cleaning: {publishDir}");
     CleanDirectory(publishDir);
+    Information($"Cleaning: {artifacts}/releases");
+    CleanDirectory($"{artifacts}/releases");
 });
 
 Task("Restore-NuGet-Packages")
@@ -194,41 +212,47 @@ Task("Create-NuGet-Package")
     .Does(() =>
 {
     var nuGetPackSettings   = new NuGetPackSettings {
-        Id                      = "SquirrelCakeStartUp",
+        Id                      = mainproject.Replace(".", string.Empty),
         Version                 = nugetVersion,
-        Title                   = "Squirrel Cake StartUp",
+        Verbosity               = NuGetVerbosity.Detailed,
+        Title                   = "Windows Forms App",
         Authors                 = new[] {"Lukkian"},
-        Description             = "My package description.",
+        Description             = "My app description.",
         IconUrl                 = new Uri("file:///" + MakeAbsolute(File($"./src/{mainproject}/cake.ico")).FullPath),
-        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", version},
         Files                   = new [] {
-                                    new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "DeltaCompressionDotNet.PatchApi.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "Mono.Cecil.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "Mono.Cecil.Mdb.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "Mono.Cecil.Pdb.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "Mono.Cecil.Rocks.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "NuGet.Squirrel.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "SharpCompress.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "Splat.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = "Squirrel.dll", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = $"{mainproject}.exe", Target = @"lib\net45"},
-                                    new NuSpecContent {Source = $"{mainproject}.exe.config", Target = @"lib\net45"},
-                                },
-        BasePath                = $"./src/{mainproject}/bin/release",
+                new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "DeltaCompressionDotNet.PatchApi.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "Mono.Cecil.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "Mono.Cecil.Mdb.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "Mono.Cecil.Pdb.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "Mono.Cecil.Rocks.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "NuGet.Squirrel.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "SharpCompress.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "Splat.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = "Squirrel.dll", Target = @"lib\net45"},
+                new NuSpecContent {Source = $"{mainproject}.exe", Target = @"lib\net45"},
+                new NuSpecContent {Source = $"{mainproject}.exe.config", Target = @"lib\net45"},
+            },
+        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", $"{version} release notes"},
+        BasePath                = $"./src/{mainproject}/bin/{configuration}",
         OutputDirectory         = $"{artifacts}/nuget"
     };
 
-    NuGetPack($"./src/{mainproject}/SquirrelCakeStartUp.nuspec", nuGetPackSettings);
+    NuGetPack($"./src/{mainproject}/{mainproject}.nuspec", nuGetPackSettings);
 });
 
 Task("Squirrel")
     .IsDependentOn("Create-NuGet-Package")
 	.Does(() => 
 {
-    Squirrel(File($"{artifacts}/nuget/SquirrelCakeStartUp.{nugetVersion}.nupkg"));
-    Information($"Squirrel package for version {nugetVersion} created on folder ./Releases/");
+    var squirrelSettings = new SquirrelSettings {
+        LoadingGif = $"./src/{mainproject}/loading.gif",
+        ReleaseDirectory = $"{artifacts}/releases",
+        FrameworkVersion = "net472"
+    };
+    Squirrel(File($"{artifacts}/nuget/{mainproject}.{nugetVersion}.nupkg"), squirrelSettings);
+    Information($"Squirrel package for version {nugetVersion} created on folder {squirrelSettings.ReleaseDirectory}");
 });
 
 Task("Publish-ClickOnce")
