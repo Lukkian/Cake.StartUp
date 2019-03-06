@@ -124,7 +124,15 @@ Setup(ctx =>
     if (AppVeyor.IsRunningOnAppVeyor)
     {
         StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{version}"); });
-        Information($"AppVeyor Configuration: {AppVeyor.Environment.Configuration}, {version}");
+        Information(
+            $@"AppVeyor Info:
+                Folder: {AppVeyor.Environment.Build.Folder}
+                Configuration: {AppVeyor.Environment.Configuration}
+                Platform: {AppVeyor.Environment.Platform}
+                Id: {AppVeyor.Environment.Build.Id}
+                Number: {AppVeyor.Environment.Build.Number}
+                Version: {AppVeyor.Environment.Build.Version}"
+        );
     }
     else
     {
