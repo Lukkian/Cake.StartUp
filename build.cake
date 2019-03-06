@@ -1,20 +1,14 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
-//#addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
-#addin nuget:?package=Cake.Powershell&version=0.4.7
 
 // Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
 #addin nuget:?package=Cake.Squirrel&version=0.14.0
 
-// To support ClickOnce and Cake 0.32.1, otherwise use: #addin nuget:?package=Cake.ClickTwice&version=0.2.0-unstable0003
-#addin nuget:?package=Lukkian.Cake.ClickTwice&version=0.1.2
-
 // To debug in dotnet core [preliminar support], otherwise use: #addin nuget:?package=Cake.Powershell&version=0.4.7
 //#addin nuget:?package=Lukkian.Cake.Powershell&version=0.4.9
+#addin nuget:?package=Cake.Powershell&version=0.4.7
 
 // To debug in VSCode uncomment below lines
-// #r ".\tools\Addins\Lukkian.Cake.ClickTwice.0.1.2\lib\net45\Cake.ClickTwice.dll"
-// #r ".\tools\Addins\Lukkian.Cake.ClickTwice.0.1.2\lib\net45\ClickTwice.Handlers.AppDetailsPage.dll"
 // #r ".\tools\Addins\Lukkian.Cake.Powershell.0.4.9\lib\netcoreapp2.1\Cake.Core.Powershell.dll"
 
 //////////////////////////////////////////////////////////////////////
@@ -41,7 +35,7 @@ var target = Argument("target", "Default");
 //////////////////////////////////////////////////////////////////////
 
 var version = appversion;
-var solution = "Example";
+var solution = "Cake.StartUp";
 var mainproject = "WindowsFormsApp";
 var testtarget = "*tests";
 var artifacts = "./artifacts";
@@ -61,7 +55,6 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 //var testResultsPath = MakeAbsolute(Directory(artifacts + "./test-results"));
 
 // Define directories.
-var buildDir = Directory($"./src/{mainproject}/bin") + Directory(configuration);
 var publishDir = Directory(publishpath);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -81,7 +74,7 @@ Setup(ctx =>
         Warning($"AppVersion: {version} (forced: {forceversion})");
     }
 
-    Information("Revision number will always be ignored and reset to zero.");
+    Information("Revision number will always be ignored and reseted to zero.");
 
     // Versioning
     var publishFile = "./publish.props";
@@ -93,7 +86,7 @@ Setup(ctx =>
     var previousVersion = new Version(storedVersion);
     Information($"Previous version: {previousVersion}");
 
-    var currentVersion = new Version(previousVersion.Major, previousVersion.Minor, previousVersion.Build + 1, 0);
+    var currentVersion = new Version(previousVersion.Major, previousVersion.Minor, previousVersion.Build + 1);
 
     var versionArg = new Version(version);
     
@@ -102,10 +95,10 @@ Setup(ctx =>
         currentVersion = versionArg;
     }
 
-    if(currentVersion.Major < 1) { currentVersion = new Version($"1.{currentVersion.Minor}.{currentVersion.Build}.{currentVersion.Revision}"); }
-    if(currentVersion.Minor < 0) { currentVersion = new Version($"{currentVersion.Major}.0.{currentVersion.Build}.{currentVersion.Revision}"); }
-    if(currentVersion.Build < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.0.{currentVersion.Revision}"); }
-    if(currentVersion.Revision < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}.0"); }
+    if(currentVersion.Major < 1) { currentVersion = new Version($"1.{currentVersion.Minor}.{currentVersion.Build}"); }
+    if(currentVersion.Minor < 0) { currentVersion = new Version($"{currentVersion.Major}.0.{currentVersion.Build}"); }
+    if(currentVersion.Build < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.0"); }
+    if(currentVersion.Revision >= 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}"); }
 
     if(currentVersion <= previousVersion)
     {
@@ -117,36 +110,24 @@ Setup(ctx =>
 
     Information($"Current version: {currentVersion} (forced: {forceversion})");
 
-    XmlPoke(publishFile, "//ApplicationRevision", "0");
     XmlPoke(publishFile, "//ApplicationVersion", currentVersion.ToString());
 
-    var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1, 0);
+    var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1);
     Information($"Next version: {nextVersion}");
 
     // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
     Information("Patching AssemblyInfo with new version number...");
-    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", version); });
-    Information($"AssemblyInfo version patched to: {version}");
-
-    // Change the version of ClickOnce in the project file, without this change the package will generate the wrong version
-    Information("Patching project file with new version number...");
-    XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationVersion", version,
-        new XmlPokeSettings { Namespaces = new Dictionary<string, string> {
-            { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
-        }
-    });
-    XmlPoke(mainprojectpath, "/ns:Project/ns:PropertyGroup/ns:ApplicationRevision", "0",
-        new XmlPokeSettings { Namespaces = new Dictionary<string, string> {
-            { "ns", "http://schemas.microsoft.com/developer/msbuild/2003" }
-        }
-    });
-    Information($"\r\rProject file version patched to: {version}");
+    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", $"{version}.0"); });
+    Information($"AssemblyInfo version patched to: {version}.0");
 });
 
 Teardown(ctx =>
 {
     // Executed AFTER the last task.
     Information("Finished running tasks.");
+    Information("****************************************");
+    Warning($"Current published version: {version}");
+    Information("****************************************");
 });
 
 //////////////////////////////////////////////////////////////////////
@@ -169,7 +150,7 @@ Task("Clean")
     CleanDirectory($"{artifacts}/releases");
 });
 
-Task("Restore-NuGet-Packages")
+Task("RestoreNuGetPackages")
     .IsDependentOn("Clean")
     .Does(() =>
 {
@@ -179,7 +160,7 @@ Task("Restore-NuGet-Packages")
 });
 
 Task("Build")
-    .IsDependentOn("Restore-NuGet-Packages")
+    .IsDependentOn("RestoreNuGetPackages")
     .Does(() =>
 {
 	Information("Building solution...");
@@ -199,7 +180,7 @@ Task("Build")
     }
 });
 
-Task("Run-Unit-Tests")
+Task("UnitTests")
     .IsDependentOn("Build")
     .Does(() =>
 {
@@ -207,8 +188,8 @@ Task("Run-Unit-Tests")
     NUnit3($"./src/**/bin/{configuration}/{testtarget}.dll", new NUnit3Settings { NoResults = true });
 });
 
-Task("Create-NuGet-Package")
-    .IsDependentOn("Run-Unit-Tests")
+Task("NuGetPackage")
+    .IsDependentOn("UnitTests")
     .Does(() =>
 {
     var nuGetPackSettings   = new NuGetPackSettings {
@@ -242,39 +223,17 @@ Task("Create-NuGet-Package")
     NuGetPack($"./src/{mainproject}/{mainproject}.nuspec", nuGetPackSettings);
 });
 
-Task("Squirrel")
-    .IsDependentOn("Create-NuGet-Package")
+Task("SquirrelPackage")
+    .IsDependentOn("NuGetPackage")
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
         LoadingGif = $"./src/{mainproject}/loading.gif",
         ReleaseDirectory = $"{artifacts}/releases",
-        FrameworkVersion = "net472"
+        FrameworkVersion = "net472",
     };
     Squirrel(File($"{artifacts}/nuget/{mainproject}.{nugetVersion}.nupkg"), squirrelSettings);
-    Information($"Squirrel package for version {nugetVersion} created on folder {squirrelSettings.ReleaseDirectory}");
-});
-
-Task("Publish-ClickOnce")
-    .IsDependentOn("Squirrel")
-    .Does(() =>
-{
-    PublishApp(mainprojectpath)
-    	.SetConfiguration(configuration)
-        //.SetBuildPlatform(MSBuildPlatform.x86)
-        //.SetBuildPlatform(MSBuildPlatform.x64)
-        //.SetBuildPlatform(MSBuildPlatform.AnyCPU)
-        //.ForceRebuild()
-        //.DoNotBuild()
-        .ThrowOnHandlerFailure()
-        .WithVersion(version)
-    	.To(publishpath);
-})
-.OnError(ex =>
-{
-    // Handle the error here.
-    Information("Message: " + ex.Message);
-    Information("StackTrace: " + ex.StackTrace);
+    Information($"Squirrel package for version {nugetVersion} created on folder: {squirrelSettings.ReleaseDirectory}");
 });
 
 //////////////////////////////////////////////////////////////////////
@@ -282,7 +241,7 @@ Task("Publish-ClickOnce")
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
-    .IsDependentOn("Publish-ClickOnce");
+    .IsDependentOn("SquirrelPackage");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
