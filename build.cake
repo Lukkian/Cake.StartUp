@@ -57,7 +57,8 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 //////////////////////////////////////////////////////////////////////
 
 private bool IsReleaseMode() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
-//private bool ShouldRunRelease() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
+//private bool IsReleaseMode() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
+private bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
@@ -118,7 +119,7 @@ Task("RunGitVersion")
         RepositoryPath = ".",
         LogFilePath = $"{artifacts}/GitVersion.log",
         OutputType = GitVersionOutput.Json,
-        UpdateAssemblyInfo = IsReleaseMode()
+        UpdateAssemblyInfo = ShouldPatchAssemblyInfo()
     });
     
     Information($"Full GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(gitVersion)}");
