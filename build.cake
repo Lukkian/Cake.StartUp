@@ -1,6 +1,7 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
 #tool nuget:?package=GitVersion.CommandLine&version=4.0.0
 #addin nuget:?package=Newtonsoft.Json&version=12.0.1
+#tool nuget:?package=gitreleasemanager&version=0.8.0
 
 // Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
@@ -23,12 +24,8 @@
 // ARGUMENTS
 //////////////////////////////////////////////////////////////////////
 
-//.\build.ps1 --appversion="1.0.0"
-//.\build.ps1 --appversion="1.0.0" --forceversion=true
+//.\build.ps1 --configuration="Debug"
 
-const string defaultVersion = "1.0.0";
-var appversion = Argument("appversion", defaultVersion);
-var forceversion = Argument("forceversion", false);
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
 
@@ -36,7 +33,6 @@ var target = Argument("target", "Default");
 // VARIABLES
 //////////////////////////////////////////////////////////////////////
 
-var version = appversion;
 var solution = "Cake.StartUp";
 var mainproject = "WindowsFormsApp";
 var testtarget = "*tests";
@@ -44,7 +40,7 @@ var artifacts = "./artifacts";
 var mainprojectpath = $"./src/{mainproject}/{mainproject}.csproj";
 var solutionpath = $"./src/{solution}.sln";
 var publishpath = $"./{artifacts}/publish";
-var nugetVersion = version;
+GitVersion gitVersion = null;
 
 //////////////////////////////////////////////////////////////////////
 // PREPARATION
@@ -56,26 +52,12 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 //var testAssemblies = projects.Where(p => p.Name.Contains("Tests")).Select(p => p.Path.GetDirectory() + "/bin/" + configuration + "/" + p.Name + ".dll");
 //var testResultsPath = MakeAbsolute(Directory(artifacts + "./test-results"));
 
-// Define directories.
-var publishDir = Directory(publishpath);
-
 //////////////////////////////////////////////////////////////////////
 // CUSTOM FUNCTIONS
 //////////////////////////////////////////////////////////////////////
 
+private bool IsReleaseMode() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
 //private bool ShouldRunRelease() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
-private bool ShouldRunRelease() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
-
-private string GetPackageVersion()
-{
-    var gitVersion = GitVersion(new GitVersionSettings {
-        RepositoryPath = ".", LogFilePath = $"{artifacts}/GitVersion.log"
-    });
-    
-    Information($"Git Semantic Version: {Newtonsoft.Json.JsonConvert.SerializeObject(gitVersion)}");
-    
-    return gitVersion.NuGetVersionV2;
-}
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
@@ -88,63 +70,67 @@ Setup(ctx =>
 	Information($"Solution: {solutionpath}");
 	Information($"Main project: {mainprojectpath}");
     Information($"Mode: {configuration}");
+});
 
-    Information($"GetPackageVersion: {GetPackageVersion()}");
+//////////////////////////////////////////////////////////////////////
+// TEARDOWN
+//////////////////////////////////////////////////////////////////////
+
+Teardown(ctx =>
+{
+    // Executed AFTER the last task.
+    Information("Finished running tasks.");
+
+    if(gitVersion != null)
+    {
+        Warning("****************************************");
+        Warning($"NugetVersion: {gitVersion.NuGetVersionV2}");
+        Warning($"FullSemVer: {gitVersion.FullSemVer}");
+        Warning($"InformationalVersion: {gitVersion.InformationalVersion}");
+        Warning("****************************************");
+    }
+});
+
+//////////////////////////////////////////////////////////////////////
+// TASKS
+//////////////////////////////////////////////////////////////////////
+
+Task("Clean")
+    .Does(() =>
+{
+    // Clean solution directories.
+    foreach(var path in projectPaths)
+    {
+        Information($"Cleaning {path}/(bin|obj)");
+        CleanDirectories($"{path}/**/bin");
+        CleanDirectories($"{path}/**/obj");
+    }
+    Information($"Cleaning: {artifacts}/releases");
+    CleanDirectory($"{artifacts}/releases");
+    Information($"Cleaning: {artifacts}/nuget");
+    CleanDirectory($"{artifacts}/nuget");
+});
+
+Task("RunGitVersion")
+    .Does(() =>
+{
+    gitVersion = GitVersion(new GitVersionSettings {
+        RepositoryPath = ".",
+        LogFilePath = $"{artifacts}/GitVersion.log",
+        OutputType = GitVersionOutput.Json,
+        UpdateAssemblyInfo = IsReleaseMode()
+    });
     
-    if(forceversion || version != defaultVersion)
-    {
-        Warning($"AppVersion: {version} (forced: {forceversion})");
-    }
+    Information($"Full GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(gitVersion)}");
+});
 
-    Information("Revision number will always be ignored and reseted to zero.");
-
-    // Versioning
-    var publishFile = "./publish.props";
-    if (FileExists(publishFile) == false)
-        throw new Exception("Build aborted: file publish.props not found!");
-    Information($"ClickOnce props file: {publishFile}");
-
-    var storedVersion = XmlPeek(publishFile, "//ApplicationVersion");
-    var previousVersion = new Version(storedVersion);
-    Information($"Previous version: {previousVersion}");
-
-    var currentVersion = new Version(previousVersion.Major, previousVersion.Minor, previousVersion.Build + 1);
-
-    var versionArg = new Version(version);
-    
-    if(forceversion || versionArg > currentVersion)
-    {
-        currentVersion = versionArg;
-    }
-
-    if(currentVersion.Major < 1) { currentVersion = new Version($"1.{currentVersion.Minor}.{currentVersion.Build}"); }
-    if(currentVersion.Minor < 0) { currentVersion = new Version($"{currentVersion.Major}.0.{currentVersion.Build}"); }
-    if(currentVersion.Build < 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.0"); }
-    if(currentVersion.Revision >= 0) { currentVersion = new Version($"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}"); }
-
-    if(currentVersion <= previousVersion)
-    {
-        Warning($"Next version: {currentVersion} is smaller or equal to the previous version: {previousVersion}");
-    }
-
-    version = currentVersion.ToString();
-    nugetVersion = $"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
-
-    Information($"Current version: {currentVersion} (forced: {forceversion})");
-
-    //XmlPoke(publishFile, "//ApplicationVersion", currentVersion.ToString());
-
-    var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1);
-    Information($"Next version: {nextVersion}");
-
-    // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
-    // Information("Patching AssemblyInfo with new version number...");
-    // StartPowershellScript("./SetAssemblyInfoVersion.ps1", new PowershellSettings { OutputToAppConsole = false }
-    //     .WithArguments(args => { args.Append("Version", $"{version}.0"); }));
-    // Information($"AssemblyInfo version patched to: {version}.0");
+Task("CheckAndUpdateAppVeyorBuild")
+    .IsDependentOn("RunGitVersion")
+    .Does(() =>
+{
     if (AppVeyor.IsRunningOnAppVeyor)
     {
-        StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{version}"); });
+        StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{gitVersion.FullSemVer}"); });
         Information(
             $@"AppVeyor Info:
                 Folder: {AppVeyor.Environment.Build.Folder}
@@ -161,39 +147,6 @@ Setup(ctx =>
     }
 });
 
-//////////////////////////////////////////////////////////////////////
-// TEARDOWN
-//////////////////////////////////////////////////////////////////////
-
-Teardown(ctx =>
-{
-    // Executed AFTER the last task.
-    Information("Finished running tasks.");
-    Information("****************************************");
-    Warning($"Current published version: {version}");
-    Information("****************************************");
-});
-
-//////////////////////////////////////////////////////////////////////
-// TASKS
-//////////////////////////////////////////////////////////////////////
-
-Task("Clean")
-    .Does(() =>
-{
-    // Clean solution directories.
-    foreach(var path in projectPaths)
-    {
-        Information($"Cleaning {path}");
-        CleanDirectories($"{path}/**/bin/");
-        CleanDirectories($"{path}/**/obj/");
-    }
-    Information($"Cleaning: {publishDir}");
-    CleanDirectory(publishDir);
-    Information($"Cleaning: {artifacts}/releases");
-    CleanDirectory($"{artifacts}/releases");
-});
-
 Task("RestoreNuGetPackages")
     .IsDependentOn("Clean")
     .Does(() =>
@@ -205,6 +158,7 @@ Task("RestoreNuGetPackages")
 
 Task("Build")
     .IsDependentOn("RestoreNuGetPackages")
+    .IsDependentOn("CheckAndUpdateAppVeyorBuild")
     .Does(() =>
 {
 	Information("Building solution...");
@@ -234,12 +188,13 @@ Task("UnitTests")
 
 Task("NuGetPackage")
     .IsDependentOn("UnitTests")
-    .WithCriteria(ShouldRunRelease())
+    .IsDependentOn("RunGitVersion")
+    .WithCriteria(IsReleaseMode())
     .Does(() =>
 {
     var nuGetPackSettings   = new NuGetPackSettings {
         Id                      = mainproject.Replace(".", string.Empty),
-        Version                 = nugetVersion,
+        Version                 = gitVersion.NuGetVersionV2,
         Verbosity               = NuGetVerbosity.Detailed,
         Title                   = "Windows Forms App",
         Authors                 = new[] {"Lukkian"},
@@ -260,7 +215,7 @@ Task("NuGetPackage")
                 new NuSpecContent {Source = $"{mainproject}.exe", Target = @"lib\net45"},
                 new NuSpecContent {Source = $"{mainproject}.exe.config", Target = @"lib\net45"},
             },
-        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", $"{version} release notes"},
+        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", $"{gitVersion.NuGetVersionV2} release notes"},
         BasePath                = $"./src/{mainproject}/bin/{configuration}",
         OutputDirectory         = $"{artifacts}/nuget"
     };
@@ -270,7 +225,8 @@ Task("NuGetPackage")
 
 Task("SquirrelPackage")
     .IsDependentOn("NuGetPackage")
-    .WithCriteria(ShouldRunRelease())
+    .IsDependentOn("RunGitVersion")
+    .WithCriteria(IsReleaseMode())
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
@@ -278,8 +234,8 @@ Task("SquirrelPackage")
         ReleaseDirectory = $"{artifacts}/releases",
         FrameworkVersion = "net472",
     };
-    Squirrel(File($"{artifacts}/nuget/{mainproject}.{nugetVersion}.nupkg"), squirrelSettings);
-    Information($"Squirrel package for version {nugetVersion} created on folder: {squirrelSettings.ReleaseDirectory}");
+    Squirrel(File($"{artifacts}/nuget/{mainproject}.{gitVersion.NuGetVersionV2}.nupkg"), squirrelSettings);
+    Information($"Squirrel package for version {gitVersion.NuGetVersionV2} created on folder: {squirrelSettings.ReleaseDirectory}");
 });
 
 //////////////////////////////////////////////////////////////////////
