@@ -132,15 +132,9 @@ Task("CheckAndUpdateAppVeyorBuild")
     if (AppVeyor.IsRunningOnAppVeyor)
     {
         StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{gitVersion.FullSemVer}"); });
-        Information(
-            $@"AppVeyor Info:
-                Folder: {AppVeyor.Environment.Build.Folder}
-                Configuration: {AppVeyor.Environment.Configuration}
-                Platform: {AppVeyor.Environment.Platform}
-                Id: {AppVeyor.Environment.Build.Id}
-                Number: {AppVeyor.Environment.Build.Number}
-                Version: {AppVeyor.Environment.Build.Version}"
-        );
+        Information($"AppVeyor Info");
+        Information($"    Folder: {AppVeyor.Environment.Build.Folder}");
+        Information($"    Number: {AppVeyor.Environment.Build.Number}");
     }
     else
     {

@@ -9,6 +9,7 @@ image: Visual Studio 2017
 artifacts:
 - path: .\artifacts\releases
   name: $(APPVEYOR_PROJECT_NAME).v$(APPVEYOR_BUILD_VERSION)
+- path: .\artifacts\nuget\*.nupkg
 
 # environment variables
 # environment:
