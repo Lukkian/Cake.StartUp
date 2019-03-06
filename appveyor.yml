@@ -8,7 +8,7 @@ image: Visual Studio 2017
 # artifacts configuration
 artifacts:
 - path: .\artifacts\releases
-  name: $APPVEYOR_PROJECT_NAME.v$APPVEYOR_BUILD_VERSION
+  name: $(APPVEYOR_PROJECT_NAME).v$(APPVEYOR_BUILD_VERSION)
 
 # environment variables
 # environment:
