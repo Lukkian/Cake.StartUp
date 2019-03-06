@@ -1,4 +1,6 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
+#tool nuget:?package=GitVersion.CommandLine&version=4.0.0
+#addin nuget:?package=Newtonsoft.Json&version=12.0.1
 
 // Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
@@ -57,9 +59,27 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 // Define directories.
 var publishDir = Directory(publishpath);
 
-///////////////////////////////////////////////////////////////////////////////
-// SETUP / TEARDOWN
-///////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+// CUSTOM FUNCTIONS
+//////////////////////////////////////////////////////////////////////
+
+//private bool ShouldRunRelease() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
+private bool ShouldRunRelease() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
+
+private string GetPackageVersion()
+{
+    var gitVersion = GitVersion(new GitVersionSettings {
+        RepositoryPath = ".", LogFilePath = $"{artifacts}/GitVersion.log"
+    });
+    
+    Information($"Git Semantic Version: {Newtonsoft.Json.JsonConvert.SerializeObject(gitVersion)}");
+    
+    return gitVersion.NuGetVersionV2;
+}
+
+//////////////////////////////////////////////////////////////////////
+// SETUP
+//////////////////////////////////////////////////////////////////////
 
 Setup(ctx =>
 {
@@ -68,6 +88,8 @@ Setup(ctx =>
 	Information($"Solution: {solutionpath}");
 	Information($"Main project: {mainprojectpath}");
     Information($"Mode: {configuration}");
+
+    Information($"GetPackageVersion: {GetPackageVersion()}");
     
     if(forceversion || version != defaultVersion)
     {
@@ -110,17 +132,16 @@ Setup(ctx =>
 
     Information($"Current version: {currentVersion} (forced: {forceversion})");
 
-    XmlPoke(publishFile, "//ApplicationVersion", currentVersion.ToString());
+    //XmlPoke(publishFile, "//ApplicationVersion", currentVersion.ToString());
 
     var nextVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1);
     Information($"Next version: {nextVersion}");
 
     // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
-    Information("Patching AssemblyInfo with new version number...");
-    //StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", $"{version}.0"); });
-    StartPowershellScript("./SetAssemblyInfoVersion.ps1", new PowershellSettings { OutputToAppConsole = false }
-        .WithArguments(args => { args.Append("Version", $"{version}.0"); }));
-    Information($"AssemblyInfo version patched to: {version}.0");
+    // Information("Patching AssemblyInfo with new version number...");
+    // StartPowershellScript("./SetAssemblyInfoVersion.ps1", new PowershellSettings { OutputToAppConsole = false }
+    //     .WithArguments(args => { args.Append("Version", $"{version}.0"); }));
+    // Information($"AssemblyInfo version patched to: {version}.0");
     if (AppVeyor.IsRunningOnAppVeyor)
     {
         StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{version}"); });
@@ -139,6 +160,10 @@ Setup(ctx =>
         Information("Not running on AppVeyor");
     }
 });
+
+//////////////////////////////////////////////////////////////////////
+// TEARDOWN
+//////////////////////////////////////////////////////////////////////
 
 Teardown(ctx =>
 {
@@ -209,6 +234,7 @@ Task("UnitTests")
 
 Task("NuGetPackage")
     .IsDependentOn("UnitTests")
+    .WithCriteria(ShouldRunRelease())
     .Does(() =>
 {
     var nuGetPackSettings   = new NuGetPackSettings {
@@ -244,6 +270,7 @@ Task("NuGetPackage")
 
 Task("SquirrelPackage")
     .IsDependentOn("NuGetPackage")
+    .WithCriteria(ShouldRunRelease())
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
