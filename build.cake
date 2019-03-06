@@ -117,8 +117,19 @@ Setup(ctx =>
 
     // Set the version in all the AssemblyInfo.cs or AssemblyInfo.vb files in any subdirectory
     Information("Patching AssemblyInfo with new version number...");
-    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", $"{version}.0"); });
+    //StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", $"{version}.0"); });
+    StartPowershellScript("./SetAssemblyInfoVersion.ps1", new PowershellSettings { OutputToAppConsole = false }
+        .WithArguments(args => { args.Append("Version", $"{version}.0"); }));
     Information($"AssemblyInfo version patched to: {version}.0");
+    if (AppVeyor.IsRunningOnAppVeyor)
+    {
+        StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{version}"); });
+        Information($"AppVeyor Configuration: {AppVeyor.Environment.Configuration}, {version}");
+    }
+    else
+    {
+        Information("Not running on AppVeyor");
+    }
 });
 
 Teardown(ctx =>
