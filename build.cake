@@ -66,7 +66,10 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 private bool IsReleaseMode() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
 //private bool IsReleaseMode() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
 private bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
-private bool ShouldPublishReleaseOnGitHub() => AppVeyor.IsRunningOnAppVeyor && string.Equals(gitVersion?.BranchName, gh_branch, StringComparison.InvariantCultureIgnoreCase);
+private bool ShouldPublishReleaseOnGitHub()
+{
+    return AppVeyor.IsRunningOnAppVeyor && string.Equals(gitVersion?.BranchName, gh_branch, StringComparison.InvariantCultureIgnoreCase);
+}
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
@@ -249,8 +252,8 @@ Task("SquirrelPackage")
 });
 
 Task("CreateReleaseNotes")
-    .IsDependentOn("SquirrelPackage")
     .IsDependentOn("RunGitVersion")
+    .IsDependentOn("SquirrelPackage")
     .WithCriteria(ShouldPublishReleaseOnGitHub())
     .Does(() =>
 {
