@@ -45,7 +45,7 @@ GitVersion gitVersion = null;
 private const string gh_token = "fd70321c54790b0edb10cfdf161d7c5ee23516f5";
 private const string gh_owner = "Lukkian";
 private const string gh_repo = "Cake.StartUp";
-private const string gh_branch = "master";
+private const string release_branch = "master";
 private string grm_log = $"{artifacts}/GitReleaseManager.log";
 private string releaseFiles = null;
 
@@ -63,13 +63,10 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 // CUSTOM FUNCTIONS
 //////////////////////////////////////////////////////////////////////
 
-private bool IsReleaseMode() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
+private bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
 //private bool IsReleaseMode() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
 private bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
-private bool ShouldPublishReleaseOnGitHub()
-{
-    return AppVeyor.IsRunningOnAppVeyor && string.Equals(gitVersion?.BranchName, gh_branch, StringComparison.InvariantCultureIgnoreCase);
-}
+private bool ShouldPublishReleaseOnGitHub() => StringComparer.OrdinalIgnoreCase.Equals(release_branch, BuildSystem.AppVeyor.Environment.Repository.Branch);
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
