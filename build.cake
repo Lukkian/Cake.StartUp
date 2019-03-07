@@ -42,6 +42,13 @@ var solutionpath = $"./src/{solution}.sln";
 var publishpath = $"./{artifacts}/publish";
 GitVersion gitVersion = null;
 
+private const string gh_token = "fd70321c54790b0edb10cfdf161d7c5ee23516f5";
+private const string gh_owner = "Lukkian";
+private const string gh_repo = "Cake.StartUp";
+private const string gh_branch = "master";
+private string grm_log = $"{artifacts}/GitReleaseManager.log";
+private string releaseFiles = null;
+
 //////////////////////////////////////////////////////////////////////
 // PREPARATION
 //////////////////////////////////////////////////////////////////////
@@ -59,6 +66,7 @@ var projectPaths = projects.Select(p => p.Path.GetDirectory());
 private bool IsReleaseMode() => string.Equals(configuration, "Release", StringComparison.InvariantCultureIgnoreCase);
 //private bool IsReleaseMode() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
 private bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
+private bool ShouldPublishReleaseOnGitHub() => AppVeyor.IsRunningOnAppVeyor && string.Equals(gitVersion.BranchName, gh_branch, StringComparison.InvariantCultureIgnoreCase);
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
@@ -231,6 +239,47 @@ Task("SquirrelPackage")
     };
     Squirrel(File($"{artifacts}/nuget/{mainproject}.{gitVersion.NuGetVersionV2}.nupkg"), squirrelSettings);
     Information($"Squirrel package for version {gitVersion.NuGetVersionV2} created on folder: {squirrelSettings.ReleaseDirectory}");
+
+    var files = GetFiles($"{artifacts}/releases/*");
+    foreach(var file in files)
+    {
+        Information("   File: {0}", file);
+    }
+    releaseFiles = files.Select(f => f.GetFilename()).Aggregate((a, b) => $"{a},{b}").ToString();
+});
+
+Task("CreateReleaseNotes")
+    .IsDependentOn("SquirrelPackage")
+    .IsDependentOn("RunGitVersion")
+    .WithCriteria(ShouldPublishReleaseOnGitHub())
+    .Does(() =>
+{
+    GitReleaseManagerCreate(gh_token, gh_owner, gh_repo, new GitReleaseManagerCreateSettings {
+        //Milestone         = gitVersion.SemVer,
+        Name              = $"v{gitVersion.SemVer}",
+        InputFilePath     = "RELEASENOTES.md",
+        Prerelease        = false,
+        TargetCommitish   = "master",
+        WorkingDirectory  = $"{artifacts}/releases",
+        ToolTimeout       = TimeSpan.FromSeconds(120),
+        LogFilePath       = grm_log
+    });
+});
+
+Task("AttachArtifact")
+    .IsDependentOn("RunGitVersion")
+    .IsDependentOn("CreateReleaseNotes")
+    .WithCriteria(ShouldPublishReleaseOnGitHub())
+    .Does(() =>
+{
+    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{gitVersion.SemVer}",
+        releaseFiles,
+        new GitReleaseManagerAddAssetsSettings {
+            WorkingDirectory  = $"{artifacts}/releases",
+            ToolTimeout       = TimeSpan.FromSeconds(120),
+            LogFilePath       = grm_log
+        });
+    Information("Files attached to the release: {0}", releaseFiles);
 });
 
 //////////////////////////////////////////////////////////////////////
@@ -238,7 +287,7 @@ Task("SquirrelPackage")
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
-    .IsDependentOn("SquirrelPackage");
+    .IsDependentOn("AttachArtifact");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
