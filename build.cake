@@ -1,7 +1,7 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
 #tool nuget:?package=GitVersion.CommandLine&version=4.0.0
 #addin nuget:?package=Newtonsoft.Json&version=12.0.1
-#tool nuget:?package=gitreleasemanager&version=0.8.0
+//#tool nuget:?package=gitreleasemanager&version=0.8.0
 
 // Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
@@ -25,78 +25,102 @@
 //////////////////////////////////////////////////////////////////////
 
 //.\build.ps1 --configuration="Debug"
+//.\build.ps1 --configuration="Debug" --publish=true
 
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
+var publish = Argument("publish", (string)null);
 
 //////////////////////////////////////////////////////////////////////
 // VARIABLES
 //////////////////////////////////////////////////////////////////////
 
 var solution = "Cake.StartUp";
-var mainproject = "WindowsFormsApp";
-var testtarget = "*tests";
+var main_project_name = "WindowsFormsApp";
+var test_target = "*tests";
 var artifacts = "./artifacts";
-var mainprojectpath = $"./src/{mainproject}/{mainproject}.csproj";
-var solutionpath = $"./src/{solution}.sln";
-var publishpath = $"./{artifacts}/publish";
-GitVersion gitVersion = null;
+var solution_path = $"./src/{solution}.sln";
+var git_version = (GitVersion)null;
 
-private const string gh_token = "fd70321c54790b0edb10cfdf161d7c5ee23516f5";
-private const string gh_owner = "Lukkian";
-private const string gh_repo = "Cake.StartUp";
-private const string release_branch = "master";
-private string grm_log = $"{artifacts}/GitReleaseManager.log";
-private string releaseFiles = null;
-
-//////////////////////////////////////////////////////////////////////
-// PREPARATION
-//////////////////////////////////////////////////////////////////////
-
-var solutionObj = ParseSolution(solutionpath);
-var projects = solutionObj.Projects;
-var projectPaths = projects.Select(p => p.Path.GetDirectory());
-//var testAssemblies = projects.Where(p => p.Name.Contains("Tests")).Select(p => p.Path.GetDirectory() + "/bin/" + configuration + "/" + p.Name + ".dll");
-//var testResultsPath = MakeAbsolute(Directory(artifacts + "./test-results"));
+var gh_owner = "Lukkian";
+var gh_repo = "Cake.StartUp";
+var release_branch = "master";
+var gh_token = EnvironmentVariable("gh_token") ?? Argument("gh_token", (string)null);
+var grm_log = $"{artifacts}/GitReleaseManager.log";
+var release_files = (string)null;
 
 //////////////////////////////////////////////////////////////////////
 // CUSTOM FUNCTIONS
 //////////////////////////////////////////////////////////////////////
 
-private bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
+bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
 //private bool IsReleaseMode() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
-private bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
-private bool ShouldPublishReleaseOnGitHub() => StringComparer.OrdinalIgnoreCase.Equals(release_branch, BuildSystem.AppVeyor.Environment.Repository.Branch);
+bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
+bool ShouldPublishReleaseOnGitHub() => !string.IsNullOrWhiteSpace(publish) || StringComparer.OrdinalIgnoreCase.Equals(release_branch, BuildSystem.AppVeyor.Environment.Repository.Branch);
+bool HasErrors() => Context.Data.Get<BuildData>().HasError;
+bool HaveGitHubCredentials()
+{
+    var haveGHC = !string.IsNullOrWhiteSpace(gh_owner);
+    haveGHC = haveGHC && !string.IsNullOrWhiteSpace(gh_repo);
+    haveGHC = haveGHC && !string.IsNullOrWhiteSpace(gh_token);
+    return haveGHC;
+}
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
 //////////////////////////////////////////////////////////////////////
 
-Setup(ctx =>
+Setup<BuildData>(ctx =>
 {
     // Executed BEFORE the first task.
     Information("Running tasks...");
-	Information($"Solution: {solutionpath}");
-	Information($"Main project: {mainprojectpath}");
+	Information($"Solution: {solution_path}");
+	Information($"Main project: ./src/{main_project_name}/{main_project_name}.csproj");
     Information($"Mode: {configuration}");
+
+    return new BuildData();
 });
 
 //////////////////////////////////////////////////////////////////////
 // TEARDOWN
 //////////////////////////////////////////////////////////////////////
-
-Teardown(ctx =>
+Teardown<BuildData>((ctx, data) =>
 {
     // Executed AFTER the last task.
     Information("Finished running tasks.");
 
-    if(gitVersion != null)
+    Warning("To create a release everything below should be True except HasErros");
+    Warning("ShouldPublishReleaseOnGitHub: {0}", ShouldPublishReleaseOnGitHub());
+    Warning("HaveGitHubCredentials: {0}",        HaveGitHubCredentials());
+    Warning("IsReleaseMode: {0}",                IsReleaseMode());
+    Warning("HasErrors: {0}",                    HasErrors());
+
+    if(git_version != null)
     {
         Warning("****************************************");
-        Warning($"NugetVersion: {gitVersion.NuGetVersionV2}");
-        Warning($"FullSemVer: {gitVersion.FullSemVer}");
-        Warning($"InformationalVersion: {gitVersion.InformationalVersion}");
+        Warning($"NugetVersion: {git_version.NuGetVersionV2}");
+        Warning($"FullSemVer: {git_version.FullSemVer}");
+        Warning($"InformationalVersion: {git_version.InformationalVersion}");
         Warning("****************************************");
+    }
+    else
+    {
+        Error("****************************************");
+        Error($"GitVersion is null");
+        Error("****************************************");
+    }
+
+    if (data.HasError)
+    {
+        Error("There were one or more errors while executing the build tasks");
+        foreach(var error in data.Errors)
+        {
+            Error($"  >{error}");
+        }
+    }
+    else
+    {
+        Information("There were no errors during the execution of the build tasks");
     }
 });
 
@@ -107,13 +131,21 @@ Teardown(ctx =>
 Task("Clean")
     .Does(() =>
 {
-    // Clean solution directories.
+    var solutionObj = ParseSolution(solution_path);
+    var projects = solutionObj.Projects;
+    var projectPaths = projects.Select(p => p.Path.GetDirectory());
+    //var testAssemblies = projects.Where(p => p.Name.Contains("Tests")).Select(p => p.Path.GetDirectory() + "/bin/" + configuration + "/" + p.Name + ".dll");
+    //var testResultsPath = MakeAbsolute(Directory(artifacts + "./test-results"));
+
+    // Clean solution directories
     foreach(var path in projectPaths)
     {
         Information($"Cleaning {path}/(bin|obj)");
         CleanDirectories($"{path}/**/bin");
         CleanDirectories($"{path}/**/obj");
     }
+
+    // Clean artifacts directories
     Information($"Cleaning: {artifacts}/releases");
     CleanDirectory($"{artifacts}/releases");
     Information($"Cleaning: {artifacts}/nuget");
@@ -123,14 +155,14 @@ Task("Clean")
 Task("RunGitVersion")
     .Does(() =>
 {
-    gitVersion = GitVersion(new GitVersionSettings {
+    git_version = GitVersion(new GitVersionSettings {
         RepositoryPath = ".",
         LogFilePath = $"{artifacts}/GitVersion.log",
         OutputType = GitVersionOutput.Json,
         UpdateAssemblyInfo = ShouldPatchAssemblyInfo()
     });
     
-    Information($"Full GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(gitVersion)}");
+    Information($"Full GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(git_version)}");
 });
 
 Task("CheckAndUpdateAppVeyorBuild")
@@ -139,7 +171,8 @@ Task("CheckAndUpdateAppVeyorBuild")
 {
     if (AppVeyor.IsRunningOnAppVeyor)
     {
-        StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{gitVersion.FullSemVer}"); });
+        //StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{gitVersion.FullSemVer}"); });
+        StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{git_version.SemVer}+{AppVeyor.Environment.Build.Number}"); });
         Information($"AppVeyor Info");
         Information($"    Folder: {AppVeyor.Environment.Build.Folder}");
         Information($"    Number: {AppVeyor.Environment.Build.Number}");
@@ -151,15 +184,15 @@ Task("CheckAndUpdateAppVeyorBuild")
 });
 
 Task("RestoreNuGetPackages")
-    .IsDependentOn("Clean")
     .Does(() =>
 {
     // Restore all NuGet packages.
     Information("Restore all NuGet packages...");
-    NuGetRestore(solutionpath);
+    NuGetRestore(solution_path);
 });
 
 Task("Build")
+    .IsDependentOn("Clean")
     .IsDependentOn("RestoreNuGetPackages")
     .IsDependentOn("CheckAndUpdateAppVeyorBuild")
     .Does(() =>
@@ -168,14 +201,14 @@ Task("Build")
     if(IsRunningOnWindows())
     {
       // Use MSBuild
-      MSBuild(solutionpath, settings =>
+      MSBuild(solution_path, settings =>
         settings.SetConfiguration(configuration)
         .SetVerbosity(Verbosity.Minimal));
     }
     else
     {
       // Use XBuild
-      XBuild(solutionpath, settings =>
+      XBuild(solution_path, settings =>
         settings.SetConfiguration(configuration)
         .SetVerbosity(Verbosity.Minimal));
     }
@@ -185,8 +218,8 @@ Task("UnitTests")
     .IsDependentOn("Build")
     .Does(() =>
 {
-    Information($"Pattern: {testtarget}");
-    NUnit3($"./src/**/bin/{configuration}/{testtarget}.dll", new NUnit3Settings { NoResults = true });
+    Information($"Pattern: {test_target}");
+    NUnit3($"./src/**/bin/{configuration}/{test_target}.dll", new NUnit3Settings { NoResults = true });
 });
 
 Task("NuGetPackage")
@@ -196,13 +229,13 @@ Task("NuGetPackage")
     .Does(() =>
 {
     var nuGetPackSettings   = new NuGetPackSettings {
-        Id                      = mainproject.Replace(".", string.Empty),
-        Version                 = gitVersion.NuGetVersionV2,
+        Id                      = main_project_name.Replace(".", string.Empty),
+        Version                 = git_version.NuGetVersionV2,
         Verbosity               = NuGetVerbosity.Detailed,
         Title                   = "Windows Forms App",
         Authors                 = new[] {"Lukkian"},
         Description             = "My app description.",
-        IconUrl                 = new Uri("file:///" + MakeAbsolute(File($"./src/{mainproject}/cake.ico")).FullPath),
+        IconUrl                 = new Uri("file:///" + MakeAbsolute(File($"./src/{main_project_name}/cake.ico")).FullPath),
         Files                   = new [] {
                 new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
                 new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
@@ -215,15 +248,15 @@ Task("NuGetPackage")
                 new NuSpecContent {Source = "SharpCompress.dll", Target = @"lib\net45"},
                 new NuSpecContent {Source = "Splat.dll", Target = @"lib\net45"},
                 new NuSpecContent {Source = "Squirrel.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = $"{mainproject}.exe", Target = @"lib\net45"},
-                new NuSpecContent {Source = $"{mainproject}.exe.config", Target = @"lib\net45"},
+                new NuSpecContent {Source = $"{main_project_name}.exe", Target = @"lib\net45"},
+                new NuSpecContent {Source = $"{main_project_name}.exe.config", Target = @"lib\net45"},
             },
-        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", $"{gitVersion.NuGetVersionV2} release notes"},
-        BasePath                = $"./src/{mainproject}/bin/{configuration}",
+        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", $"{git_version.NuGetVersionV2} release notes"},
+        BasePath                = $"./src/{main_project_name}/bin/{configuration}",
         OutputDirectory         = $"{artifacts}/nuget"
     };
 
-    NuGetPack($"./src/{mainproject}/{mainproject}.nuspec", nuGetPackSettings);
+    NuGetPack($"./src/{main_project_name}/{main_project_name}.nuspec", nuGetPackSettings);
 });
 
 Task("SquirrelPackage")
@@ -233,30 +266,32 @@ Task("SquirrelPackage")
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
-        LoadingGif = $"./src/{mainproject}/loading.gif",
+        LoadingGif = $"./src/{main_project_name}/loading.gif",
         ReleaseDirectory = $"{artifacts}/releases",
         FrameworkVersion = "net472",
     };
-    Squirrel(File($"{artifacts}/nuget/{mainproject}.{gitVersion.NuGetVersionV2}.nupkg"), squirrelSettings);
-    Information($"Squirrel package for version {gitVersion.NuGetVersionV2} created on folder: {squirrelSettings.ReleaseDirectory}");
+    Squirrel(File($"{artifacts}/nuget/{main_project_name}.{git_version.NuGetVersionV2}.nupkg"), squirrelSettings);
+    Information($"Squirrel package for version {git_version.NuGetVersionV2} created on folder: {squirrelSettings.ReleaseDirectory}");
 
     var files = GetFiles($"{artifacts}/releases/*");
     foreach(var file in files)
     {
         Information("   File: {0}", file);
     }
-    releaseFiles = files.Select(f => f.GetFilename()).Aggregate((a, b) => $"{a},{b}").ToString();
+    release_files = files.Select(f => f.GetFilename()).Aggregate((a, b) => $"{a},{b}").ToString();
 });
 
-Task("CreateReleaseNotes")
+Task("CreateGitHubRelease")
     .IsDependentOn("RunGitVersion")
     .IsDependentOn("SquirrelPackage")
     .WithCriteria(ShouldPublishReleaseOnGitHub())
+    .WithCriteria(HaveGitHubCredentials())
+    .WithCriteria(() => HasErrors() == false)
     .Does(() =>
 {
     GitReleaseManagerCreate(gh_token, gh_owner, gh_repo, new GitReleaseManagerCreateSettings {
         //Milestone         = gitVersion.SemVer,
-        Name              = $"v{gitVersion.SemVer}",
+        Name              = $"v{git_version.SemVer}",
         InputFilePath     = "RELEASENOTES.md",
         Prerelease        = false,
         TargetCommitish   = "master",
@@ -264,22 +299,35 @@ Task("CreateReleaseNotes")
         ToolTimeout       = TimeSpan.FromSeconds(120),
         LogFilePath       = grm_log
     });
+}).OnError(exception => {
+    Error(exception);
+    var data = Context.Data.Get<BuildData>();
+    data.HasError = true;
+    data.AddError(exception.Message);
 });
 
-Task("AttachArtifact")
+Task("AttachGitHubReleaseArtifacts")
     .IsDependentOn("RunGitVersion")
-    .IsDependentOn("CreateReleaseNotes")
+    .IsDependentOn("SquirrelPackage")
+    .IsDependentOn("CreateGitHubRelease")
     .WithCriteria(ShouldPublishReleaseOnGitHub())
+    .WithCriteria(HaveGitHubCredentials())
+    .WithCriteria(() => HasErrors() == false)
     .Does(() =>
 {
-    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{gitVersion.SemVer}",
-        releaseFiles,
+    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{git_version.SemVer}",
+        release_files,
         new GitReleaseManagerAddAssetsSettings {
             WorkingDirectory  = $"{artifacts}/releases",
             ToolTimeout       = TimeSpan.FromSeconds(120),
             LogFilePath       = grm_log
         });
-    Information("Files attached to the release: {0}", releaseFiles);
+    Information("Files attached to the release: {0}", release_files);
+}).OnError(exception => {
+    Error(exception);
+    var data = Context.Data.Get<BuildData>();
+    data.HasError = true;
+    data.AddError(exception.Message);
 });
 
 //////////////////////////////////////////////////////////////////////
@@ -287,10 +335,27 @@ Task("AttachArtifact")
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
-    .IsDependentOn("AttachArtifact");
+    .IsDependentOn("AttachGitHubReleaseArtifacts");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
 //////////////////////////////////////////////////////////////////////
 
 RunTarget(target);
+
+public class BuildData
+{
+    public bool HasError { get; set; }
+    public IList<string> Errors { get => _errors; }
+    private IList<string> _errors;
+
+    public BuildData()
+    {
+        _errors = new List<string>();
+    }
+
+    public void AddError(string error)
+    {
+        _errors.Add(error);
+    }
+}
