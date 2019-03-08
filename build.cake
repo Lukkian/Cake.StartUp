@@ -1,7 +1,7 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
 #tool nuget:?package=GitVersion.CommandLine&version=4.0.0
 #addin nuget:?package=Newtonsoft.Json&version=12.0.1
-//#tool nuget:?package=gitreleasemanager&version=0.8.0
+#tool nuget:?package=gitreleasemanager&version=0.8.0
 
 // Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
