@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Squirrel;
 
 namespace WindowsFormsApp
 {
@@ -46,11 +41,12 @@ namespace WindowsFormsApp
 
         private async Task CheckForUpdates()
         {
-            const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
-
-            var activity = new Activity<bool>();
             var token = new CancellationTokenSource();
             var appUpdate = new AppUpdate();
+
+#if DEBUG
+            appUpdate.FakeUpdate = true;
+#endif
 
             void MessageLogs(string msg)
             {
@@ -103,7 +99,6 @@ namespace WindowsFormsApp
             }
 
             _updateInProgress = true;
-            var task = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, token, false);
             appUpdate.UpdateDone += () =>
             {
                 _updateInProgress = false;
@@ -148,7 +143,22 @@ namespace WindowsFormsApp
             {
                 var timeout = TimeSpan.FromSeconds(120);
                 updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
-                await activity.ForTask(task).WithToken(token).Wait(timeout).Run();
+
+                const string updatePath = @"C:\MyAppUpdates";
+                updateLogTextBox.AppendLine($"Checking for local updates on path: {updatePath}");
+                var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, token, false);
+                var success = await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(token).Wait(timeout).Run().ConfigureAwait(true);
+
+                // Wait for all messages to be written to the log
+                await Task.Delay(1000, token.Token);
+
+                if (success == false)
+                {
+                    const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
+                    updateLogTextBox.AppendLine($"Checking for local updates on server: {updateUrl}");
+                    var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, token, false);
+                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(token).Wait(timeout).Run();
+                }
             }
             catch (OperationCanceledException)
             {
@@ -175,76 +185,6 @@ namespace WindowsFormsApp
         private void TouchGui(Action action)
         {
             BeginInvoke(action);
-        }
-
-        // ReSharper disable once UnusedMember.Local
-        private async Task CheckForUpdatesOnNetWorkOrLocalDriveAsync(Form form)
-        {
-            updateLogTextBox.Text += "\nChecking for updates...";
-
-            var di = new DirectoryInfo(@"C:\source\repos\Cake\Cake.StartUp\Releases");
-
-            if (!di.Exists)
-            {
-                updateLogTextBox.Text += $"\nDirectory not found: {di.FullName}";
-                return;
-            }
-
-            var fi = new FileInfo(Path.Combine(di.FullName, "RELEASES"));
-
-            if (!fi.Exists)
-            {
-                updateLogTextBox.Text += $"\nFile not found: {fi.FullName}";
-                return;
-            }
-
-            using (var manager = new UpdateManager(di.FullName))
-            {
-                var updateInfo = await manager.CheckForUpdate();
-
-                // Check for Squirrel application update
-                if (updateInfo.ReleasesToApply.Any()) // Check if we have any update
-                {
-                    updateLogTextBox.Text += "\nPerforming app update, please wait...";
-
-                    var assembly = Assembly.GetExecutingAssembly();
-                    var fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
-
-                    var releaseNotes = new StringBuilder();
-
-                    foreach (var releaseEntry in updateInfo.ReleasesToApply)
-                    {
-                        releaseNotes.AppendLine($"\n\nVersion: {releaseEntry.Version}");
-                        releaseNotes.AppendLine(releaseEntry.GetReleaseNotes(di.FullName)
-                            .Replace("<![CDATA[", "")
-                            .Replace("<p>", "")
-                            .Replace("</p>", "")
-                            .Replace("]]>", "")
-                            .Trim()
-                        );
-                    }
-
-                    var msg = "New version available!" +
-                              "\n\nCurrent version: " + updateInfo.CurrentlyInstalledVersion.Version +
-                               "\nNew version: " + updateInfo.FutureReleaseEntry.Version +
-                              "\n\nThe application will update and restart." +
-                              "\n\nRelease notes: " + releaseNotes;
-
-                    form.BeginInvoke(new Action(() => MessageBox.Show(msg, fvi.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Information)));
-
-                    // Do the update
-                    await manager.UpdateApp();
-
-                    updateLogTextBox.Text += "\nApp update done, restarting...";
-
-                    // Restart the app
-                    UpdateManager.RestartApp();
-                }
-                else
-                {
-                    updateLogTextBox.Text += "\nNo update found.";
-                }
-            }
         }
 
         private void ShowAppVersion()
