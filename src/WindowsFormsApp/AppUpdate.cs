@@ -173,7 +173,7 @@ namespace WindowsFormsApp
                 RestartApp();
             }
 
-            return true;
+            return State == UpdateState.Done;
         }
 
         public static void RestartApp()

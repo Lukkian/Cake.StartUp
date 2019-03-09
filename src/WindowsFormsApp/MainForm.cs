@@ -158,7 +158,7 @@ namespace WindowsFormsApp
                     const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
                     updateLogTextBox.AppendLine($"Checking for local updates on server: {updateUrl}");
                     var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, token, false);
-                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(token).Wait(timeout).Run();
+                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(token).Wait(timeout).Run().ConfigureAwait(true);
                 }
             }
             catch (OperationCanceledException)
