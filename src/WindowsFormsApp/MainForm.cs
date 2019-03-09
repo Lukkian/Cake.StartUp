@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -114,7 +115,7 @@ namespace WindowsFormsApp
                         {
                             WindowState = FormWindowState.Minimized;
                             Visible = false;
-                            appUpdate.RestartApp();
+                            AppUpdate.RestartApp();
                         }
                     }
                     else
@@ -189,7 +190,12 @@ namespace WindowsFormsApp
 
         private void ShowAppVersion()
         {
-            updateLogTextBox.Text = $"Version: {Application.ProductVersion}";
+            var version = Assembly.GetEntryAssembly().GetName().Version;
+
+            // remove revision number
+            version = new Version(version.Major, version.Minor, version.Build);
+
+            updateLogTextBox.Text = $"Version: {version}";
         }
     }
 }
