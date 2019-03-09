@@ -54,10 +54,27 @@ var release_files = (string)null;
 //////////////////////////////////////////////////////////////////////
 
 bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
-//private bool IsReleaseMode() => AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag;
 bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
-bool ShouldPublishReleaseOnGitHub() => !string.IsNullOrWhiteSpace(publish) || StringComparer.OrdinalIgnoreCase.Equals(release_branch, BuildSystem.AppVeyor.Environment.Repository.Branch);
-bool HasErrors() => Context.Data.Get<BuildData>().HasError;
+bool ShouldPublishReleaseOnGitHub()
+{
+    var haveVersion = git_version != null;
+
+    var forcePublish = string.IsNullOrWhiteSpace(publish) == false;
+    
+    var isInReleaseBranch = StringComparer.OrdinalIgnoreCase.Equals(release_branch, git_version?.BranchName);
+
+    if(haveVersion && (forcePublish || isInReleaseBranch))
+    {
+        if(AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag == false)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    return false;
+}
 bool HaveGitHubCredentials()
 {
     var haveGHC = !string.IsNullOrWhiteSpace(gh_owner);
@@ -65,6 +82,7 @@ bool HaveGitHubCredentials()
     haveGHC = haveGHC && !string.IsNullOrWhiteSpace(gh_token);
     return haveGHC;
 }
+bool HasErrors() => Context.Data.Get<BuildData>().HasError;
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
@@ -225,7 +243,7 @@ Task("UnitTests")
 Task("NuGetPackage")
     .IsDependentOn("UnitTests")
     .IsDependentOn("RunGitVersion")
-    .WithCriteria(IsReleaseMode())
+    .WithCriteria(() => IsReleaseMode())
     .Does(() =>
 {
     var nuGetPackSettings   = new NuGetPackSettings {
@@ -262,7 +280,7 @@ Task("NuGetPackage")
 Task("SquirrelPackage")
     .IsDependentOn("NuGetPackage")
     .IsDependentOn("RunGitVersion")
-    .WithCriteria(IsReleaseMode())
+    .WithCriteria(() => IsReleaseMode())
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
@@ -284,8 +302,8 @@ Task("SquirrelPackage")
 Task("CreateGitHubRelease")
     .IsDependentOn("RunGitVersion")
     .IsDependentOn("SquirrelPackage")
-    .WithCriteria(ShouldPublishReleaseOnGitHub())
-    .WithCriteria(HaveGitHubCredentials())
+    .WithCriteria(() => ShouldPublishReleaseOnGitHub())
+    .WithCriteria(() => HaveGitHubCredentials())
     .WithCriteria(() => HasErrors() == false)
     .Does(() =>
 {
@@ -310,8 +328,8 @@ Task("AttachGitHubReleaseArtifacts")
     .IsDependentOn("RunGitVersion")
     .IsDependentOn("SquirrelPackage")
     .IsDependentOn("CreateGitHubRelease")
-    .WithCriteria(ShouldPublishReleaseOnGitHub())
-    .WithCriteria(HaveGitHubCredentials())
+    .WithCriteria(() => ShouldPublishReleaseOnGitHub())
+    .WithCriteria(() => HaveGitHubCredentials())
     .WithCriteria(() => HasErrors() == false)
     .Does(() =>
 {
