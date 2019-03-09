@@ -1,34 +1,32 @@
 build_script:
 - ps: .\build.ps1
 
-test: on
+test: off
 
 image: Visual Studio 2017
 
-# artifacts configuration
 artifacts:
 - path: .\artifacts\releases
   name: $(APPVEYOR_PROJECT_NAME).v$(APPVEYOR_BUILD_VERSION)
 - path: .\artifacts\nuget\*.nupkg
 
-# environment variables
 environment:
-  # this is how to set encrypted variable. Go to "Settings" -> "Encrypt YAML" page in account menu to encrypt data.
+  # to set encrypted variable: Go to "Settings" -> "Encrypt YAML" page in account menu
   gh_token:
     secure: LspLx0+75147+2KRJW+KiFWsj9RmBTaEeY+AJe0G9YsdYFWZIadU/xufjdP8aOd+
 
-# branches to build
 branches:
   # whitelist
   only:
     - master
     - production
-    - appveyor
+    - develop
+    - /release/.*/
+    - /hotfix/.*/
   # blacklist
   except:
     - gh-pages
 
-# notifications
 notifications:
   # Email
   - provider: Email

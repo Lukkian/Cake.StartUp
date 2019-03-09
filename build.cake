@@ -53,6 +53,17 @@ var release_files = (string)null;
 // CUSTOM FUNCTIONS
 //////////////////////////////////////////////////////////////////////
 
+string[] GetReleaseNotes()
+{
+    // Create the release notes and RELEASENOTES.md file dynamically during a release build
+    // Maybe through GitReleaseManagerExporter?
+    return new [] {"Bug fixes", "Issue fixes", "Typos", $"{git_version?.NuGetVersionV2} release notes"};
+}
+
+//////////////////////////////////////////////////////////////////////
+// CUSTOM FUNCTIONS
+//////////////////////////////////////////////////////////////////////
+
 bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
 bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
 bool ShouldPublishReleaseOnGitHub()
@@ -269,7 +280,7 @@ Task("NuGetPackage")
                 new NuSpecContent {Source = $"{main_project_name}.exe", Target = @"lib\net45"},
                 new NuSpecContent {Source = $"{main_project_name}.exe.config", Target = @"lib\net45"},
             },
-        ReleaseNotes            = new [] {"Bug fixes", "Issue fixes", "Typos", $"{git_version.NuGetVersionV2} release notes"},
+        ReleaseNotes            = GetReleaseNotes(),
         BasePath                = $"./src/{main_project_name}/bin/{configuration}",
         OutputDirectory         = $"{artifacts}/nuget"
     };

@@ -120,7 +120,7 @@ namespace WindowsFormsApp
                     }
                     else
                     {
-                        MessageBox.Show("No update found.");
+                        MessageBox.Show("No update found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 });
             };
@@ -129,14 +129,14 @@ namespace WindowsFormsApp
                 TouchGui(() =>
                 {
                     var notes = new StringBuilder();
-                    notes.AppendLine("New version available, those are the release notes:");
+                    notes.AppendLine("New version available, those are the release notes:\n");
 
                     foreach (var entry in args.ReleaseNotes)
                     {
                         notes.AppendLine($"Version {entry.Version}: {entry.ReleaseNotes}");
                     }
 
-                    MessageBox.Show(notes.ToString());
+                    MessageBox.Show(notes.ToString(), "Release Notes", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 });
             };
 
@@ -168,7 +168,7 @@ namespace WindowsFormsApp
                     Text = "Windows Forms App - MainForm [backgroung]";
                     updateLogTextBox.AppendLine("Update task put into background");
                     const string msg = "Ok, at this point the update process may have ended or not, but it seems to be taking a long time to respond, so let's leave it in the background and allow the app to continue working on other things.";
-                    MessageBox.Show(msg);
+                    MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 });
             }
             catch (Exception ex)
@@ -178,7 +178,7 @@ namespace WindowsFormsApp
                     _updateInProgress = false;
                     Text = "Windows Forms App - MainForm [error]";
                     updateLogTextBox.AppendLine("Update error");
-                    MessageBox.Show(ex.Message);
+                    MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 });
             }
         }

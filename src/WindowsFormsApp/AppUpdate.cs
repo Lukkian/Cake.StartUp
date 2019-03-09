@@ -14,9 +14,9 @@ namespace WindowsFormsApp
         public UpdateState State { get; private set; }
         public bool FakeUpdate { get; set; }
 
-        public async Task<bool> CheckForUpdatesOnLocalNetwordkAsync(string path, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
+        public async Task<bool> CheckForUpdatesOnLocalNetwordkAsync(string updatePath, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
-            var di = new DirectoryInfo(path);
+            var di = new DirectoryInfo(updatePath);
 
             if (!di.Exists)
             {
@@ -35,10 +35,10 @@ namespace WindowsFormsApp
                 log($"File not found: {fi.FullName}");
                 return false;
             }
-            
+
             using (var manager = new UpdateManager(di.FullName))
             {
-                return await CheckForUpdatesAsync(manager, log, token, restartOnSuccess);
+                return await CheckForUpdatesAsync(manager, updatePath, log, token, restartOnSuccess);
             }
         }
 
@@ -46,11 +46,11 @@ namespace WindowsFormsApp
         {
             using (var manager = await UpdateManager.GitHubUpdateManager(updateUrl).ConfigureAwait(false))
             {
-                return await CheckForUpdatesAsync(manager, log, token, restartOnSuccess);
+                return await CheckForUpdatesAsync(manager, updateUrl, log, token, restartOnSuccess);
             }
         }
 
-        private async Task<bool> CheckForUpdatesAsync(IUpdateManager manager, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
+        private async Task<bool> CheckForUpdatesAsync(IUpdateManager manager, string updatePath, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
             State = UpdateState.Checking;
             log("Contacting update server...");
@@ -97,34 +97,27 @@ namespace WindowsFormsApp
                     }
                 }).ConfigureAwait(false);
 
-                var releaseNotes = new StringBuilder();
-                var releaseEntries = new List<GotUpdateReleaseNotesEventArgs.ReleaseEntry>();
+                var cleanReleaseNotes = CleanReleaseNotes(updateInfo.FetchReleaseNotes());
 
-                foreach (var entry in updateInfo.FetchReleaseNotes())
+                if (cleanReleaseNotes.Count <= 0)
                 {
-                    var notes = entry.Value
-                                    .Replace("<![CDATA[\n", "")
-                                    .Replace("<p>", "")
-                                    .Replace("</p>", "")
-                                    .Replace("]]>", "")
-                                    .Replace("\n\n", "")
-                                    .Replace("\n", "; ")
-                                    .Trim() + ";";
-
-                    releaseNotes.Append($"Version {entry.Key.Version}: {notes}{Environment.NewLine}");
-
-                    releaseEntries.Add(
-                        new GotUpdateReleaseNotesEventArgs.ReleaseEntry(entry.Key.Version.ToString(), notes));
+                    cleanReleaseNotes = CleanReleaseNotes(FetchReleaseNotes(updateInfo));
                 }
 
-                GotReleaseNotes?.Invoke(new GotUpdateReleaseNotesEventArgs(releaseEntries));
+                var releaseNotes = new StringBuilder();
 
-                if (string.IsNullOrWhiteSpace(releaseNotes.ToString().Trim()))
+                foreach (var note in cleanReleaseNotes)
                 {
-                    log("Release notes not found.");
+                    releaseNotes.Append($"Version {note.Version}: {note.ReleaseNotes}{Environment.NewLine}");
+                }
+
+                if (releaseNotes.Length <= 0)
+                {
+                    log("Release notes not found");
                 }
                 else
                 {
+                    GotReleaseNotes?.Invoke(new GotUpdateReleaseNotesEventArgs(cleanReleaseNotes));
                     log("Release notes:");
                     log(releaseNotes.ToString().TrimEnd(Environment.NewLine.ToCharArray()));
                 }
@@ -161,7 +154,7 @@ namespace WindowsFormsApp
             }
             else
             {
-                log("No update found.");
+                log($"No updates found on path: {updatePath}");
             }
 
             UpdateDone?.Invoke();
@@ -174,6 +167,47 @@ namespace WindowsFormsApp
             }
 
             return State == UpdateState.Done;
+        }
+
+        private static Dictionary<ReleaseEntry, string> FetchReleaseNotes(UpdateInfo updateInfo)
+        {
+            var releaseNotes = new Dictionary<ReleaseEntry, string>(1);
+
+            foreach (var entry in updateInfo.ReleasesToApply)
+            {
+                var notes = entry.GetReleaseNotes(updateInfo.PackageDirectory);
+                releaseNotes.Add(entry, notes);
+            }
+
+            return releaseNotes;
+        }
+
+        private static List<GotUpdateReleaseNotesEventArgs.ReleaseEntry> CleanReleaseNotes(Dictionary<ReleaseEntry, string> releaseNotes)
+        {
+            var cleanReleaseNotes = new List<GotUpdateReleaseNotesEventArgs.ReleaseEntry>();
+
+            foreach (var entry in releaseNotes)
+            {
+                var notes = entry.Value
+                                .Replace("<![CDATA[\n", "")
+                                .Replace("<p>", "")
+                                .Replace("</p>", "")
+                                .Replace("]]>", "")
+                                .Replace("\n\n", "")
+                                .Replace("\n", "; ")
+                                .Trim() + ";";
+
+                if (string.IsNullOrWhiteSpace(notes) == false)
+                {
+                    cleanReleaseNotes.Add(new GotUpdateReleaseNotesEventArgs.ReleaseEntry(entry.Key.Version.ToString(), notes));
+                }
+                else
+                {
+                    cleanReleaseNotes.Add(new GotUpdateReleaseNotesEventArgs.ReleaseEntry(entry.Key.Version.ToString(), "release notes not found"));
+                }
+            }
+
+            return cleanReleaseNotes;
         }
 
         public static void RestartApp()
