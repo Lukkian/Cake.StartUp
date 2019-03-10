@@ -345,10 +345,32 @@ Task("CreateGitHubRelease")
     data.AddError(exception.Message);
 });
 
+Task("ExportGitHubReleaseNotes")
+    .IsDependentOn("RunGitVersion")
+    .IsDependentOn("CreateGitHubRelease")
+    .IsDependentOn("CreateGitHubRelease")
+    .WithCriteria(() => ShouldPublishReleaseOnGitHub())
+    .WithCriteria(() => HaveGitHubCredentials())
+    .WithCriteria(() => HasErrors() == false)
+    .Does(() =>
+{
+    DeleteFile("./GLOBALRELEASENOTES.md");
+    GitReleaseManagerExport(gh_token, gh_owner, gh_repo, File("./GLOBALRELEASENOTES.md"), new GitReleaseManagerExportSettings {
+        ToolTimeout       = tool_timeout,
+        LogFilePath       = grm_log
+    });
+}).OnError(exception => {
+    Error(exception);
+    var data = Context.Data.Get<BuildData>();
+    data.HasError = true;
+    data.AddError(exception.Message);
+});
+
 Task("AttachGitHubReleaseArtifacts")
     .IsDependentOn("RunGitVersion")
     .IsDependentOn("SquirrelPackage")
     .IsDependentOn("CreateGitHubRelease")
+    .IsDependentOn("ExportGitHubReleaseNotes")
     .WithCriteria(() => ShouldPublishReleaseOnGitHub())
     .WithCriteria(() => HaveGitHubCredentials())
     .WithCriteria(() => HasErrors() == false)
@@ -371,33 +393,12 @@ Task("AttachGitHubReleaseArtifacts")
     data.AddError(exception.Message);
 });
 
-Task("ExportGitHubReleaseNotes")
-    .IsDependentOn("RunGitVersion")
-    .IsDependentOn("CreateGitHubRelease")
-    .WithCriteria(() => ShouldPublishReleaseOnGitHub())
-    .WithCriteria(() => HaveGitHubCredentials())
-    .WithCriteria(() => HasErrors() == false)
-    .Does(() =>
-{
-    DeleteFile("./GLOBALRELEASENOTES.md");
-    GitReleaseManagerExport(gh_token, gh_owner, gh_repo, File("./GLOBALRELEASENOTES.md"), new GitReleaseManagerExportSettings {
-        ToolTimeout       = tool_timeout,
-        LogFilePath       = grm_log
-    });
-}).OnError(exception => {
-    Error(exception);
-    var data = Context.Data.Get<BuildData>();
-    data.HasError = true;
-    data.AddError(exception.Message);
-});
-    
 //////////////////////////////////////////////////////////////////////
 // TASK TARGETS
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
-    .IsDependentOn("AttachGitHubReleaseArtifacts")
-    .IsDependentOn("ExportGitHubReleaseNotes");
+    .IsDependentOn("AttachGitHubReleaseArtifacts");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
