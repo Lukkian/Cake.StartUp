@@ -131,6 +131,15 @@ Teardown<BuildData>((ctx, data) =>
         Error("****************************************");
     }
 
+    if(data.ReleaseNotes.Any())
+    {
+        Information("Release notes:");
+        foreach(var releaseNote in data.ReleaseNotes)
+        {
+            Information($"  >{releaseNote}");
+        }
+    }
+
     if (data.HasError)
     {
         Error("There were one or more errors while executing the build tasks");
@@ -206,8 +215,6 @@ Task("CheckAndUpdateAppVeyorBuild")
 Task("RestoreNuGetPackages")
     .Does(() =>
 {
-    // Restore all NuGet packages.
-    Information("Restore all NuGet packages...");
     NuGetRestore(solution_path);
 });
 
@@ -264,6 +271,7 @@ Task("ReadReleaseNotes")
 Task("NuGetPackage")
     .IsDependentOn("UnitTests")
     .IsDependentOn("RunGitVersion")
+    .IsDependentOn("ReadReleaseNotes")
     .WithCriteria(() => IsReleaseMode())
     .Does(() =>
 {
@@ -415,6 +423,7 @@ public class BuildData
     public BuildData()
     {
         _errors = new List<string>();
+        _releaseNotes = new List<string>();
     }
 
     public void AddError(string error)
