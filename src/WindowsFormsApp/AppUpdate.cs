@@ -171,7 +171,7 @@ namespace WindowsFormsApp
 
         private static Dictionary<ReleaseEntry, string> FetchReleaseNotes(UpdateInfo updateInfo)
         {
-            var releaseNotes = new Dictionary<ReleaseEntry, string>(1);
+            var releaseNotes = new Dictionary<ReleaseEntry, string>(updateInfo.ReleasesToApply.Count);
 
             foreach (var entry in updateInfo.ReleasesToApply)
             {
@@ -184,7 +184,7 @@ namespace WindowsFormsApp
 
         private static List<GotUpdateReleaseNotesEventArgs.ReleaseEntry> CleanReleaseNotes(Dictionary<ReleaseEntry, string> releaseNotes)
         {
-            var cleanReleaseNotes = new List<GotUpdateReleaseNotesEventArgs.ReleaseEntry>();
+            var cleanReleaseNotes = new List<GotUpdateReleaseNotesEventArgs.ReleaseEntry>(releaseNotes.Count);
 
             foreach (var entry in releaseNotes)
             {

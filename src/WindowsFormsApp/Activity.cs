@@ -20,7 +20,8 @@ namespace WindowsFormsApp
         public async Task<T> Run()
         {
             _tokenSource = _tokenSource ?? new CancellationTokenSource();
-            //var run = Task.Run(() => _task, _tokenSource.Token); // Execute a long running process
+
+            // Execute a long running process
             var run = _task;
 
             // Check the task is delaying
