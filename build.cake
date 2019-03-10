@@ -360,7 +360,11 @@ Task("ExportGitHubReleaseNotes")
     .WithCriteria(() => HasErrors() == false)
     .Does(() =>
 {
-    DeleteFile("./GLOBALRELEASENOTES.md");
+    if(FileExists("./GLOBALRELEASENOTES.md"))
+    {
+        DeleteFile("./GLOBALRELEASENOTES.md");
+    }
+    
     GitReleaseManagerExport(gh_token, gh_owner, gh_repo, File("./GLOBALRELEASENOTES.md"), new GitReleaseManagerExportSettings {
         ToolTimeout       = tool_timeout,
         LogFilePath       = grm_log
