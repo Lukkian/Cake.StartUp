@@ -38,6 +38,8 @@ var publish = Argument("publish", (string)null);
 
 var solution = "Cake.StartUp";
 var main_project_name = "WindowsFormsApp";
+var app_icon = MakeAbsolute(File($"./src/{main_project_name}/cake.ico")).FullPath;
+var app_install_gif = $"./src/{main_project_name}/loading.gif";
 var test_target = "*tests";
 var artifacts = "./artifacts";
 var solution_path = $"./src/{solution}.sln";
@@ -49,7 +51,6 @@ var release_branch = "master";
 var gh_token = EnvironmentVariable("gh_token") ?? Argument("gh_token", (string)null);
 var grm_log = $"{artifacts}/GitReleaseManager.log";
 var release_files = (string)null;
-
 var tool_timeout = TimeSpan.FromMinutes(5);
 
 //////////////////////////////////////////////////////////////////////
@@ -282,7 +283,7 @@ Task("NuGetPackage")
         Title                   = "Windows Forms App",
         Authors                 = new[] {"Lukkian"},
         Description             = "My app description.",
-        IconUrl                 = new Uri("file:///" + MakeAbsolute(File($"./src/{main_project_name}/cake.ico")).FullPath),
+        IconUrl                 = new Uri("file:///" + app_icon),
         Files                   = new [] {
                 new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
                 new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
@@ -313,7 +314,9 @@ Task("SquirrelPackage")
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
-        LoadingGif = $"./src/{main_project_name}/loading.gif",
+        Icon             = app_icon,
+        SetupIcon        = app_icon,
+        LoadingGif       = app_install_gif,
         ReleaseDirectory = $"{artifacts}/releases",
         FrameworkVersion = "net472",
     };
@@ -364,7 +367,7 @@ Task("ExportGitHubReleaseNotes")
     {
         DeleteFile("./GLOBALRELEASENOTES.md");
     }
-    
+
     GitReleaseManagerExport(gh_token, gh_owner, gh_repo, File("./GLOBALRELEASENOTES.md"), new GitReleaseManagerExportSettings {
         ToolTimeout       = tool_timeout,
         LogFilePath       = grm_log
