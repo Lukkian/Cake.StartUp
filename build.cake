@@ -1,7 +1,8 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
 #tool nuget:?package=GitVersion.CommandLine&version=4.0.0
-#addin nuget:?package=Newtonsoft.Json&version=12.0.1
 #tool nuget:?package=gitreleasemanager&version=0.8.0
+#addin nuget:?package=Newtonsoft.Json&version=12.0.1
+#addin nuget:?package=Cake.FileHelpers&version=3.1.0
 
 // Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
@@ -49,16 +50,7 @@ var gh_token = EnvironmentVariable("gh_token") ?? Argument("gh_token", (string)n
 var grm_log = $"{artifacts}/GitReleaseManager.log";
 var release_files = (string)null;
 
-//////////////////////////////////////////////////////////////////////
-// CUSTOM FUNCTIONS
-//////////////////////////////////////////////////////////////////////
-
-string[] GetReleaseNotes()
-{
-    // Create the release notes and RELEASENOTES.md file dynamically during a release build
-    // Maybe through GitReleaseManagerExporter?
-    return new [] {"Bug fixes", "Issue fixes", "Typos", $"{git_version?.NuGetVersionV2} release notes"};
-}
+var tool_timeout = TimeSpan.FromMinutes(5);
 
 //////////////////////////////////////////////////////////////////////
 // CUSTOM FUNCTIONS
@@ -200,7 +192,6 @@ Task("CheckAndUpdateAppVeyorBuild")
 {
     if (AppVeyor.IsRunningOnAppVeyor)
     {
-        //StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{gitVersion.FullSemVer}"); });
         StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{git_version.FullSemVer}.b{AppVeyor.Environment.Build.Number}"); });
         Information($"AppVeyor Info");
         Information($"    Folder: {AppVeyor.Environment.Build.Folder}");
@@ -251,6 +242,25 @@ Task("UnitTests")
     NUnit3($"./src/**/bin/{configuration}/{test_target}.dll", new NUnit3Settings { NoResults = true });
 });
 
+Task("ReadReleaseNotes")
+    .WithCriteria(() => IsReleaseMode())
+	.Does(() => 
+{
+    string[] releaseNotes;
+
+    if(FileExists("./RELEASENOTES.md"))
+    {
+        releaseNotes = FileReadLines("./RELEASENOTES.md");
+    }
+    else
+    {
+        releaseNotes = new [] { "No release notes found." };
+    }
+    
+    var data = Context.Data.Get<BuildData>();
+    data.SetReleaseNotes(releaseNotes);
+});
+
 Task("NuGetPackage")
     .IsDependentOn("UnitTests")
     .IsDependentOn("RunGitVersion")
@@ -280,7 +290,7 @@ Task("NuGetPackage")
                 new NuSpecContent {Source = $"{main_project_name}.exe", Target = @"lib\net45"},
                 new NuSpecContent {Source = $"{main_project_name}.exe.config", Target = @"lib\net45"},
             },
-        ReleaseNotes            = GetReleaseNotes(),
+        ReleaseNotes            = Context.Data.Get<BuildData>().ReleaseNotes,
         BasePath                = $"./src/{main_project_name}/bin/{configuration}",
         OutputDirectory         = $"{artifacts}/nuget"
     };
@@ -321,11 +331,11 @@ Task("CreateGitHubRelease")
     GitReleaseManagerCreate(gh_token, gh_owner, gh_repo, new GitReleaseManagerCreateSettings {
         //Milestone         = gitVersion.SemVer,
         Name              = $"v{git_version.SemVer}",
-        InputFilePath     = "RELEASENOTES.md",
+        InputFilePath     = "./RELEASENOTES.md",
         Prerelease        = false,
         TargetCommitish   = "master",
         WorkingDirectory  = $"{artifacts}/releases",
-        ToolTimeout       = TimeSpan.FromSeconds(120),
+        ToolTimeout       = tool_timeout,
         LogFilePath       = grm_log
     });
 }).OnError(exception => {
@@ -344,11 +354,13 @@ Task("AttachGitHubReleaseArtifacts")
     .WithCriteria(() => HasErrors() == false)
     .Does(() =>
 {
+    var globalReleaseNotesFile = MakeAbsolute(File("./GLOBALRELEASENOTES.md")).FullPath;
+    release_files += $",{globalReleaseNotesFile}";
     GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{git_version.SemVer}",
         release_files,
         new GitReleaseManagerAddAssetsSettings {
             WorkingDirectory  = $"{artifacts}/releases",
-            ToolTimeout       = TimeSpan.FromSeconds(120),
+            ToolTimeout       = tool_timeout,
             LogFilePath       = grm_log
         });
     Information("Files attached to the release: {0}", release_files);
@@ -359,12 +371,33 @@ Task("AttachGitHubReleaseArtifacts")
     data.AddError(exception.Message);
 });
 
+Task("ExportGitHubReleaseNotes")
+    .IsDependentOn("RunGitVersion")
+    .IsDependentOn("CreateGitHubRelease")
+    .WithCriteria(() => ShouldPublishReleaseOnGitHub())
+    .WithCriteria(() => HaveGitHubCredentials())
+    .WithCriteria(() => HasErrors() == false)
+    .Does(() =>
+{
+    DeleteFile("./GLOBALRELEASENOTES.md");
+    GitReleaseManagerExport(gh_token, gh_owner, gh_repo, File("./GLOBALRELEASENOTES.md"), new GitReleaseManagerExportSettings {
+        ToolTimeout       = tool_timeout,
+        LogFilePath       = grm_log
+    });
+}).OnError(exception => {
+    Error(exception);
+    var data = Context.Data.Get<BuildData>();
+    data.HasError = true;
+    data.AddError(exception.Message);
+});
+    
 //////////////////////////////////////////////////////////////////////
 // TASK TARGETS
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
-    .IsDependentOn("AttachGitHubReleaseArtifacts");
+    .IsDependentOn("AttachGitHubReleaseArtifacts")
+    .IsDependentOn("ExportGitHubReleaseNotes");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
@@ -377,6 +410,8 @@ public class BuildData
     public bool HasError { get; set; }
     public IList<string> Errors { get => _errors; }
     private IList<string> _errors;
+    public ICollection<string> ReleaseNotes { get => _releaseNotes; }
+    private ICollection<string> _releaseNotes;
 
     public BuildData()
     {
@@ -386,5 +421,10 @@ public class BuildData
     public void AddError(string error)
     {
         _errors.Add(error);
+    }
+
+    public void SetReleaseNotes(ICollection<string> releaseNotes)
+    {
+        _releaseNotes= releaseNotes;
     }
 }
