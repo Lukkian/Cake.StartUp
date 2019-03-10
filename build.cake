@@ -346,8 +346,6 @@ Task("CreateGitHubRelease")
 });
 
 Task("ExportGitHubReleaseNotes")
-    .IsDependentOn("RunGitVersion")
-    .IsDependentOn("CreateGitHubRelease")
     .IsDependentOn("CreateGitHubRelease")
     .WithCriteria(() => ShouldPublishReleaseOnGitHub())
     .WithCriteria(() => HaveGitHubCredentials())
