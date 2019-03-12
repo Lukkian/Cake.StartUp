@@ -79,7 +79,7 @@ branches:
     regex: dev(elop)?(ment)?$
     mode: ContinuousDeployment
     tag: unstable
-    increment: Minor
+    increment: Patch
     prevent-increment-of-merged-branch-version: false
     track-merge-target: true
     tracks-release-branches: true
@@ -87,8 +87,8 @@ branches:
   appveyor:
     regex: appveyor[/-]
     mode: ContinuousDeployment
-    tag: unstable
-    increment: Minor
+    tag: appveyor
+    increment: Patch
     prevent-increment-of-merged-branch-version: false
     track-merge-target: true
     tracks-release-branches: true

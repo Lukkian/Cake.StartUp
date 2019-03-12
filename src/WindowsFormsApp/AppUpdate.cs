@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -44,6 +45,14 @@ namespace WindowsFormsApp
 
         public async Task<bool> CheckForUpdatesOnGitHubAsync(string updateUrl, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
+            if (await CheckForInternetConnection().ConfigureAwait(false) == false)
+            {
+                State = UpdateState.CantConecctServer;
+                UpdateDone?.Invoke();
+                log("Could not connect to server");
+                return false;
+            }
+
             using (var manager = await UpdateManager.GitHubUpdateManager(updateUrl).ConfigureAwait(false))
             {
                 return await CheckForUpdatesAsync(manager, updateUrl, log, token, restartOnSuccess).ConfigureAwait(false);
@@ -128,7 +137,7 @@ namespace WindowsFormsApp
 
                 if (FakeUpdate)
                 {
-                    await Task.Delay(1000);
+                    await Task.Delay(1000).ConfigureAwait(false);
                 }
                 else
                 {
@@ -219,6 +228,23 @@ namespace WindowsFormsApp
             Task.Run(() => UpdateManager.RestartApp(null, "--myapp-firstrunafterupdate")).ConfigureAwait(false);
         }
 
+        private static async Task<bool> CheckForInternetConnection()
+        {
+            try
+            {
+                using (var client = new WebClient() { Proxy = null })
+                //using (client.OpenRead("http://clients3.google.com/generate_204"))
+                using (await client.OpenReadTaskAsync(new Uri("http://172.217.12.206/generate_204")).ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public event GotUpdateReleaseNotes GotReleaseNotes;
         public delegate void GotUpdateReleaseNotes(GotUpdateReleaseNotesEventArgs args);
 
@@ -256,6 +282,7 @@ namespace WindowsFormsApp
         Downloading,
         Done,
         NotInstalledApp,
-        InvalidUpdatePath
+        InvalidUpdatePath,
+        CantConecctServer
     }
 }

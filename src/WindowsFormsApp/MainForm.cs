@@ -144,6 +144,7 @@ namespace WindowsFormsApp
 
             try
             {
+                updateLogTextBox.AppendLine("Starting Check for Updates");
                 _updateInProgress = true;
                 var timeout = TimeSpan.FromSeconds(5);
                 updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
@@ -156,13 +157,13 @@ namespace WindowsFormsApp
                     {
                         if (t.Exception != null)
                         {
-                            TouchGui(() => updateLogTextBox.AppendLine(t.Exception.Message));
+                            TouchGui(() => updateLogTextBox.AppendLine($"{t.Exception.Message}\n{t.Exception.StackTrace}"));
                         }
-                        TouchGui(() => updateLogTextBox.AppendLine("DoneLocalUpdate"));
+                        TouchGui(() => updateLogTextBox.AppendLine("[DoneLocalUpdate]"));
                         _updateInProgress = false;
                     }).ConfigureAwait(true);
 
-                // Wait for all messages to be written to the log
+                // Wait for all messages to be logged
                 await Task.Delay(1000, token.Token);
 
                 if (success == false)
@@ -176,9 +177,9 @@ namespace WindowsFormsApp
                         {
                             if (t.Exception != null)
                             {
-                                TouchGui(() => updateLogTextBox.AppendLine(t.Exception.Message));
+                                TouchGui(() => updateLogTextBox.AppendLine($"{t.Exception.Message}\n{t.Exception.StackTrace}"));
                             }
-                            TouchGui(() => updateLogTextBox.AppendLine("DoneRemoteUpdate"));
+                            TouchGui(() => updateLogTextBox.AppendLine("[DoneRemoteUpdate]"));
                             _updateInProgress = false;
                         }).ConfigureAwait(true);
                 }
@@ -190,14 +191,14 @@ namespace WindowsFormsApp
                     Text = "Windows Forms App - MainForm [backgroung]";
                     updateLogTextBox.AppendLine("[Timeout!] Update task put into background");
                     const string msg = "Ok, at this point the update process may have ended or not, but it seems to be taking a long time to respond, so let's leave it in the background and allow the app to continue working on other things.";
-                    MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(msg, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 });
             }
             catch (TimeoutException ex)
             {
                 TouchGui(() =>
                 {
-                    updateLogTextBox.AppendLine(ex.Message);
+                    updateLogTextBox.AppendLine($"TimeoutException: {ex.Message}\n{ex.StackTrace}");
                 });
             }
             catch (Exception ex)
@@ -233,7 +234,11 @@ namespace WindowsFormsApp
             // remove revision number
             version = new Version(version.Major, version.Minor, version.Build);
 
+#if DEBUG
+            updateLogTextBox.Text = $"Version: {version}-debug";
+#else
             updateLogTextBox.Text = $"Version: {version}";
+#endif
         }
     }
 }

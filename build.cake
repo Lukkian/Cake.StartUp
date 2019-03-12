@@ -61,7 +61,7 @@ var tool_timeout = TimeSpan.FromMinutes(5);
 //////////////////////////////////////////////////////////////////////
 
 bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
-bool ShouldPatchAssemblyInfo() => AppVeyor.IsRunningOnAppVeyor;
+bool ShouldPatchAssemblyInfo() => true;//AppVeyor.IsRunningOnAppVeyor;
 bool ShouldPublishReleaseOnGitHub()
 {
     var haveVersion = git_version != null;
