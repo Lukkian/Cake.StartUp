@@ -38,7 +38,10 @@ var publish = Argument("publish", (string)null);
 
 var solution = "Cake.StartUp";
 var main_project_name = "WindowsFormsApp";
-var app_icon = MakeAbsolute(File($"./src/{main_project_name}/cake.ico")).FullPath;
+var app_uri_icon = "https://raw.githubusercontent.com/Lukkian/Cake.StartUp/master/src/WindowsFormsApp/cake.ico";
+// Nuget/Squirrel uninstall icon must be on a public Webserver and its fetched at installation time not packaging time.
+// See: https://github.com/Squirrel/Squirrel.Windows/issues/761 and https://github.com/NuGet/Home/issues/352
+var app_local_icon = MakeAbsolute(File($"./src/{main_project_name}/cake.ico")).FullPath;
 var app_install_gif = $"./src/{main_project_name}/loading.gif";
 var test_target = "*tests";
 var artifacts = "./artifacts";
@@ -283,7 +286,7 @@ Task("NuGetPackage")
         Title                   = "Windows Forms App",
         Authors                 = new[] {"Lukkian"},
         Description             = "My app description.",
-        IconUrl                 = new Uri("file:///" + app_icon),
+        IconUrl                 = new Uri(app_uri_icon),
         Files                   = new [] {
                 new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
                 new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
@@ -314,11 +317,13 @@ Task("SquirrelPackage")
 	.Does(() => 
 {
     var squirrelSettings = new SquirrelSettings {
-        Icon             = app_icon,
-        SetupIcon        = app_icon,
+        Icon             = app_uri_icon,
+        SetupIcon        = app_local_icon,
         LoadingGif       = app_install_gif,
         ReleaseDirectory = $"{artifacts}/releases",
         FrameworkVersion = "net472",
+        NoMsi            = true,
+        NoDelta          = true,
     };
     Squirrel(File($"{artifacts}/nuget/{main_project_name}.{git_version.NuGetVersionV2}.nupkg"), squirrelSettings);
     Information($"Squirrel package for version {git_version.NuGetVersionV2} created on folder: {squirrelSettings.ReleaseDirectory}");
