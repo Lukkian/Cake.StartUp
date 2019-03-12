@@ -13,6 +13,7 @@ namespace WindowsFormsApp
     public class AppUpdate
     {
         public UpdateState State { get; private set; }
+        public CancellationTokenSource Token { get; private set; }
         public bool FakeUpdate { get; set; }
 
         public async Task<bool> CheckForUpdatesOnLocalNetwordkAsync(string updatePath, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
@@ -61,6 +62,7 @@ namespace WindowsFormsApp
 
         private async Task<bool> CheckForUpdatesAsync(IUpdateManager manager, string updatePath, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
+            Token = token;
             State = UpdateState.Checking;
             log("Contacting update server...");
 

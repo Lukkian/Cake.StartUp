@@ -42,7 +42,6 @@ namespace WindowsFormsApp
 
         private async Task CheckForUpdates()
         {
-            var token = new CancellationTokenSource();
             var appUpdate = new AppUpdate();
 
 #if DEBUG
@@ -151,8 +150,8 @@ namespace WindowsFormsApp
 
                 const string updatePath = @"C:\MyAppUpdates";
                 updateLogTextBox.AppendLine($"Checking for local updates on path: {updatePath}");
-                var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, token, false);
-                var success = await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(token).Wait(timeout)
+                var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, new CancellationTokenSource(), false);
+                var success = await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(appUpdate.Token).Wait(timeout)
                     .Run(t =>
                     {
                         if (t.Exception != null)
@@ -164,15 +163,15 @@ namespace WindowsFormsApp
                     }).ConfigureAwait(true);
 
                 // Wait for all messages to be logged
-                await Task.Delay(1000, token.Token);
+                await Task.Delay(1000);
 
                 if (success == false)
                 {
                     _updateInProgress = true;
                     const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
                     updateLogTextBox.AppendLine($"Checking for remote updates on server: {updateUrl}");
-                    var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, token, false);
-                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(token).Wait(timeout)
+                    var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, new CancellationTokenSource(), false);
+                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(appUpdate.Token).Wait(timeout)
                         .Run(t =>
                         {
                             if (t.Exception != null)
