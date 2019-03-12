@@ -17,12 +17,12 @@ namespace WindowsFormsApp
             _timeout = timeout != default ? timeout : _timeout;
         }
 
-        public async Task<T> Run()
+        public async Task<T> Run(Action<Task<T>> continueWith = null)
         {
             _tokenSource = _tokenSource ?? new CancellationTokenSource();
 
             // Execute a long running process
-            var run = _task;
+            var run = _task.ContinueWith(t => continueWith?.Invoke(t));
 
             // Check the task is delaying
             if (await Task.WhenAny(run, Task.Delay(_timeout)) == run)
@@ -47,9 +47,10 @@ namespace WindowsFormsApp
 
             // Consider that the task may have faulted or been canceled.
             // We re-await the task so that any exceptions/cancellation is rethrown.
-            var result = await run;
+            //var result = await run;
 
-            return result;
+            //return result;
+            return await _task;
         }
 
         public Activity<T> ForTask(Task<T> task)

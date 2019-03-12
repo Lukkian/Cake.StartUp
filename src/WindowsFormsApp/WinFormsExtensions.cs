@@ -7,10 +7,11 @@ namespace WindowsFormsApp
     {
         public static void AppendLine(this TextBox source, string value)
         {
+            var time = string.IsNullOrWhiteSpace(value) ? string.Empty : $"[{DateTime.Now:T}]: ";
             if (source.Text.Length == 0)
-                source.Text = value;
+                source.Text = $"{time}{value}";
             else
-                source.AppendText($"{Environment.NewLine}{value}");
+                source.AppendText($"{Environment.NewLine}{time}{value}");
         }
     }
 }

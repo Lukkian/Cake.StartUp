@@ -59,7 +59,7 @@ namespace WindowsFormsApp
                         if (duplicateIndex > 0 && msg.Contains(duplicate))
                         {
                             var output = updateLogTextBox.Text;
-                            var substring = output.Substring(0, duplicateIndex);
+                            var substring = output.Substring(0, duplicateIndex - 12).TrimEnd(Environment.NewLine.ToCharArray());
 
                             output = output.Remove(0, substring.Length);
                             var newLineIndex = output.IndexOf(Environment.NewLine, StringComparison.InvariantCultureIgnoreCase);
@@ -69,8 +69,10 @@ namespace WindowsFormsApp
                                 remaining = output.Substring(newLineIndex);
                             }
 
-                            msg = $"{substring}{msg}{remaining}".Trim();
-                            updateLogTextBox.Clear();
+                            updateLogTextBox.Text = substring;
+                            msg = $"{msg}{remaining}".Trim();
+                            //msg = $"{substring}{msg}{remaining}".Trim();
+                            //updateLogTextBox.Clear();
                         }
 
                         return msg;
@@ -83,6 +85,7 @@ namespace WindowsFormsApp
                     msg = RemoveDuplicate(updatingMsg);
 
                     updateLogTextBox.AppendLine(msg);
+                    //updateLogTextBox.Text += msg;
 
                     switch (appUpdate.State)
                     {
@@ -99,10 +102,24 @@ namespace WindowsFormsApp
                 });
             }
 
-            _updateInProgress = true;
+            appUpdate.GotReleaseNotes += args =>
+            {
+                TouchGui(() =>
+                {
+                    var notes = new StringBuilder();
+                    notes.AppendLine("New version available, those are the release notes:\n");
+
+                    foreach (var entry in args.ReleaseNotes)
+                    {
+                        notes.AppendLine($"Version {entry.Version}: {entry.ReleaseNotes}");
+                    }
+
+                    MessageBox.Show(notes.ToString(), "Release Notes", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                });
+            };
+
             appUpdate.UpdateDone += () =>
             {
-                _updateInProgress = false;
                 TouchGui(() =>
                 {
                     Text = "Windows Forms App - MainForm [done]";
@@ -120,45 +137,50 @@ namespace WindowsFormsApp
                     }
                     else
                     {
-                        MessageBox.Show("No update found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        //MessageBox.Show("No update found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
-                });
-            };
-            appUpdate.GotReleaseNotes += args =>
-            {
-                TouchGui(() =>
-                {
-                    var notes = new StringBuilder();
-                    notes.AppendLine("New version available, those are the release notes:\n");
-
-                    foreach (var entry in args.ReleaseNotes)
-                    {
-                        notes.AppendLine($"Version {entry.Version}: {entry.ReleaseNotes}");
-                    }
-
-                    MessageBox.Show(notes.ToString(), "Release Notes", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 });
             };
 
             try
             {
-                var timeout = TimeSpan.FromSeconds(120);
+                _updateInProgress = true;
+                var timeout = TimeSpan.FromSeconds(5);
                 updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
 
                 const string updatePath = @"C:\MyAppUpdates";
                 updateLogTextBox.AppendLine($"Checking for local updates on path: {updatePath}");
                 var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, token, false);
-                var success = await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(token).Wait(timeout).Run().ConfigureAwait(true);
+                var success = await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(token).Wait(timeout)
+                    .Run(t =>
+                    {
+                        if (t.Exception != null)
+                        {
+                            TouchGui(() => updateLogTextBox.AppendLine(t.Exception.Message));
+                        }
+                        TouchGui(() => updateLogTextBox.AppendLine("DoneLocalUpdate"));
+                        _updateInProgress = false;
+                    }).ConfigureAwait(true);
 
                 // Wait for all messages to be written to the log
                 await Task.Delay(1000, token.Token);
 
                 if (success == false)
                 {
+                    _updateInProgress = true;
                     const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
-                    updateLogTextBox.AppendLine($"Checking for local updates on server: {updateUrl}");
+                    updateLogTextBox.AppendLine($"Checking for remote updates on server: {updateUrl}");
                     var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, token, false);
-                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(token).Wait(timeout).Run().ConfigureAwait(true);
+                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(token).Wait(timeout)
+                        .Run(t =>
+                        {
+                            if (t.Exception != null)
+                            {
+                                TouchGui(() => updateLogTextBox.AppendLine(t.Exception.Message));
+                            }
+                            TouchGui(() => updateLogTextBox.AppendLine("DoneRemoteUpdate"));
+                            _updateInProgress = false;
+                        }).ConfigureAwait(true);
                 }
             }
             catch (OperationCanceledException)
@@ -166,18 +188,34 @@ namespace WindowsFormsApp
                 TouchGui(() =>
                 {
                     Text = "Windows Forms App - MainForm [backgroung]";
-                    updateLogTextBox.AppendLine("Update task put into background");
+                    updateLogTextBox.AppendLine("[Timeout!] Update task put into background");
                     const string msg = "Ok, at this point the update process may have ended or not, but it seems to be taking a long time to respond, so let's leave it in the background and allow the app to continue working on other things.";
                     MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 });
             }
-            catch (Exception ex)
+            catch (TimeoutException ex)
             {
                 TouchGui(() =>
                 {
-                    _updateInProgress = false;
+                    updateLogTextBox.AppendLine(ex.Message);
+                });
+            }
+            catch (Exception ex)
+            {
+                var innerEx = ex.InnerException;
+
+                while (innerEx?.InnerException != null)
+                {
+                    innerEx = innerEx.InnerException;
+                }
+
+                var msg = $"{ex.Message}\n{innerEx?.Message}\n{ex.StackTrace}".Replace("\n\n", "\n");
+
+                TouchGui(() =>
+                {
                     Text = "Windows Forms App - MainForm [error]";
                     updateLogTextBox.AppendLine("Update error");
+                    updateLogTextBox.AppendLine(msg);
                     MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 });
             }

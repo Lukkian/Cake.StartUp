@@ -46,7 +46,7 @@ namespace WindowsFormsApp
         {
             using (var manager = await UpdateManager.GitHubUpdateManager(updateUrl).ConfigureAwait(false))
             {
-                return await CheckForUpdatesAsync(manager, updateUrl, log, token, restartOnSuccess);
+                return await CheckForUpdatesAsync(manager, updateUrl, log, token, restartOnSuccess).ConfigureAwait(false);
             }
         }
 
@@ -83,6 +83,8 @@ namespace WindowsFormsApp
                 log($"New version: {futureVersion}");
 
                 log("The application will now download and apply the update...");
+
+                log("Downloading update 0%");
 
                 await manager.DownloadReleases(updateInfo.ReleasesToApply, i =>
                 {
@@ -130,6 +132,7 @@ namespace WindowsFormsApp
                 }
                 else
                 {
+                    log("Updating 0%");
                     // Do the update
                     await manager.UpdateApp(i =>
                     {
