@@ -1,5 +1,3 @@
-Always patch AssemblyInfo with GitVersion on each Cake build
-GitVersion.yml tweaks
-Checks internet connection before looking for updates on a remote server
-Better error messages and logs
-Cancellation tokens improvements
+Resets AssemblyInfo version to 'Major.Minor.0.0' after build
+Rename Setup.exe to main project name
+Still trying to improve error handling

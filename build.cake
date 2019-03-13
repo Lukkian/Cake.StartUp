@@ -43,6 +43,7 @@ var app_uri_icon = "https://raw.githubusercontent.com/Lukkian/Cake.StartUp/maste
 // See: https://github.com/Squirrel/Squirrel.Windows/issues/761 and https://github.com/NuGet/Home/issues/352
 var app_local_icon = MakeAbsolute(File($"./src/{main_project_name}/cake.ico")).FullPath;
 var app_install_gif = $"./src/{main_project_name}/loading.gif";
+var app_install_description = "A simple Cake StartUp sample wtih Squirrel.Windows intallation and update system.";
 var test_target = "*tests";
 var artifacts = "./artifacts";
 var solution_path = $"./src/{solution}.sln";
@@ -245,6 +246,14 @@ Task("Build")
     }
 });
 
+Task("ResetAssemblyInfoVersion")
+    .IsDependentOn("RunGitVersion")
+    .IsDependentOn("Build")
+    .Does(() =>
+{
+    StartPowershellFile("./SetAssemblyInfoVersion.ps1", args => { args.Append("Version", $"{git_version.Major}.{git_version.Minor}.0.0"); });
+});
+
 Task("UnitTests")
     .IsDependentOn("Build")
     .Does(() =>
@@ -283,9 +292,9 @@ Task("NuGetPackage")
         Id                      = main_project_name.Replace(".", string.Empty),
         Version                 = git_version.NuGetVersionV2,
         Verbosity               = NuGetVerbosity.Detailed,
-        Title                   = "Windows Forms App",
+        Title                   = main_project_name,
         Authors                 = new[] {"Lukkian"},
-        Description             = "My app description.",
+        Description             = app_install_description,
         IconUrl                 = new Uri(app_uri_icon),
         Files                   = new [] {
                 new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
@@ -325,8 +334,13 @@ Task("SquirrelPackage")
         NoMsi            = true,
         NoDelta          = true,
     };
-    Squirrel(File($"{artifacts}/nuget/{main_project_name}.{git_version.NuGetVersionV2}.nupkg"), squirrelSettings);
+    Squirrel(File($"{artifacts}/nuget/{main_project_name.Replace(".", string.Empty)}.{git_version.NuGetVersionV2}.nupkg"), squirrelSettings);
     Information($"Squirrel package for version {git_version.NuGetVersionV2} created on folder: {squirrelSettings.ReleaseDirectory}");
+
+    if(FileExists($"{artifacts}/releases/Setup.exe"))
+    {
+        MoveFile($"{artifacts}/releases/Setup.exe", $"{artifacts}/releases/{main_project_name}-{git_version.SemVer}.exe");
+    }
 
     var files = GetFiles($"{artifacts}/releases/*");
     foreach(var file in files)
@@ -416,6 +430,7 @@ Task("AttachGitHubReleaseArtifacts")
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
+    .IsDependentOn("ResetAssemblyInfoVersion")
     .IsDependentOn("AttachGitHubReleaseArtifacts");
 
 //////////////////////////////////////////////////////////////////////

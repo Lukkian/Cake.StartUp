@@ -18,6 +18,8 @@ namespace WindowsFormsApp
 
         public async Task<bool> CheckForUpdatesOnLocalNetwordkAsync(string updatePath, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
+            State = UpdateState.init;
+
             var di = new DirectoryInfo(updatePath);
 
             if (!di.Exists)
@@ -40,12 +42,14 @@ namespace WindowsFormsApp
 
             using (var manager = new UpdateManager(di.FullName))
             {
-                return await CheckForUpdatesAsync(manager, updatePath, log, token, restartOnSuccess);
+                return await CheckForUpdatesAsync(manager, updatePath, log, token, restartOnSuccess).ConfigureAwait(false);
             }
         }
 
         public async Task<bool> CheckForUpdatesOnGitHubAsync(string updateUrl, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
+            State = UpdateState.init;
+
             if (await CheckForInternetConnection().ConfigureAwait(false) == false)
             {
                 State = UpdateState.CantConecctServer;
@@ -285,6 +289,7 @@ namespace WindowsFormsApp
         Done,
         NotInstalledApp,
         InvalidUpdatePath,
-        CantConecctServer
+        CantConecctServer,
+        init
     }
 }

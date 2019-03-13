@@ -151,37 +151,39 @@ namespace WindowsFormsApp
                 const string updatePath = @"C:\MyAppUpdates";
                 updateLogTextBox.AppendLine($"Checking for local updates on path: {updatePath}");
                 var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, new CancellationTokenSource(), false);
-                var success = await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(appUpdate.Token).Wait(timeout)
+                await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(appUpdate.Token).Wait(timeout)
                     .Run(t =>
                     {
                         if (t.Exception != null)
                         {
-                            TouchGui(() => updateLogTextBox.AppendLine($"{t.Exception.Message}\n{t.Exception.StackTrace}"));
+                            var ex = t.Exception.GetBaseException();
+                            TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}\nStackTrace: {ex.StackTrace}"));
                         }
                         TouchGui(() => updateLogTextBox.AppendLine("[DoneLocalUpdate]"));
                         _updateInProgress = false;
                     }).ConfigureAwait(true);
 
                 // Wait for all messages to be logged
-                await Task.Delay(1000);
-
-                if (success == false)
+                do
                 {
-                    _updateInProgress = true;
-                    const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
-                    updateLogTextBox.AppendLine($"Checking for remote updates on server: {updateUrl}");
-                    var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, new CancellationTokenSource(), false);
-                    await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(appUpdate.Token).Wait(timeout)
-                        .Run(t =>
+                    await Task.Delay(1000);
+                } while (_updateInProgress);
+
+                _updateInProgress = true;
+                const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
+                updateLogTextBox.AppendLine($"Checking for remote updates on server: {updateUrl}");
+                var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, new CancellationTokenSource(), false);
+                await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(appUpdate.Token).Wait(timeout)
+                    .Run(t =>
+                    {
+                        if (t.Exception != null)
                         {
-                            if (t.Exception != null)
-                            {
-                                TouchGui(() => updateLogTextBox.AppendLine($"{t.Exception.Message}\n{t.Exception.StackTrace}"));
-                            }
-                            TouchGui(() => updateLogTextBox.AppendLine("[DoneRemoteUpdate]"));
-                            _updateInProgress = false;
-                        }).ConfigureAwait(true);
-                }
+                            var ex = t.Exception.GetBaseException();
+                            TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}\nStackTrace: {ex.StackTrace}"));
+                        }
+                        TouchGui(() => updateLogTextBox.AppendLine("[DoneRemoteUpdate]"));
+                        _updateInProgress = false;
+                    }).ConfigureAwait(true);
             }
             catch (OperationCanceledException)
             {
