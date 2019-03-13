@@ -298,7 +298,7 @@ Task("NuGetPackage")
         Id                      = main_project_name.Replace(".", string.Empty),
         Version                 = git_version.NuGetVersionV2,
         Verbosity               = NuGetVerbosity.Detailed,
-        Title                   = main_project_name,
+        Title                   = $"{main_project_name}-{git_version.SemVer}",
         Authors                 = new[] {"Lukkian"},
         Description             = app_install_description,
         IconUrl                 = new Uri(app_uri_icon),
