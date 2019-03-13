@@ -251,7 +251,7 @@ Task("ResetAssemblyInfoVersion")
     .IsDependentOn("Build")
     .Does(() =>
 {
-    StartPowershellFile("./SetAssemblyInfoVersion.ps1", new PowershellSettings() { LogOutput = false }
+    StartPowershellFile("./SetAssemblyInfoVersion.ps1", new PowershellSettings() { OutputToAppConsole = false }
         .WithArguments(args =>
         {
             args.Append("Version", $"{git_version.Major}.{git_version.Minor}.0.0");
