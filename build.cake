@@ -63,6 +63,7 @@ var tool_timeout = TimeSpan.FromMinutes(5);
 
 bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
 bool ShouldPatchAssemblyInfo() => true;//AppVeyor.IsRunningOnAppVeyor;
+bool ShouldResetAssemblyInfo() => BuildSystem.IsLocalBuild;
 bool ShouldPublishReleaseOnGitHub()
 {
     var haveVersion = git_version != null;
@@ -249,6 +250,7 @@ Task("Build")
 Task("ResetAssemblyInfoVersion")
     .IsDependentOn("RunGitVersion")
     .IsDependentOn("Build")
+    .WithCriteria(() => ShouldResetAssemblyInfo())
     .Does(() =>
 {
     StartPowershellFile("./SetAssemblyInfoVersion.ps1", new PowershellSettings() { OutputToAppConsole = false }
@@ -292,7 +294,7 @@ Task("NuGetPackage")
     .WithCriteria(() => IsReleaseMode())
     .Does(() =>
 {
-    var nuGetPackSettings   = new NuGetPackSettings {
+    var nuGetPackSettings = new NuGetPackSettings {
         Id                      = main_project_name.Replace(".", string.Empty),
         Version                 = git_version.NuGetVersionV2,
         Verbosity               = NuGetVerbosity.Detailed,
@@ -301,20 +303,20 @@ Task("NuGetPackage")
         Description             = app_install_description,
         IconUrl                 = new Uri(app_uri_icon),
         Files                   = new [] {
-                new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "DeltaCompressionDotNet.PatchApi.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "Mono.Cecil.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "Mono.Cecil.Mdb.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "Mono.Cecil.Pdb.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "Mono.Cecil.Rocks.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "NuGet.Squirrel.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "SharpCompress.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "Splat.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = "Squirrel.dll", Target = @"lib\net45"},
-                new NuSpecContent {Source = $"{main_project_name}.exe", Target = @"lib\net45"},
-                new NuSpecContent {Source = $"{main_project_name}.exe.config", Target = @"lib\net45"},
-            },
+            new NuSpecContent {Source = "DeltaCompressionDotNet.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "DeltaCompressionDotNet.MsDelta.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "DeltaCompressionDotNet.PatchApi.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "Mono.Cecil.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "Mono.Cecil.Mdb.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "Mono.Cecil.Pdb.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "Mono.Cecil.Rocks.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "NuGet.Squirrel.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "SharpCompress.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "Splat.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = "Squirrel.dll", Target = @"lib\net45"},
+            new NuSpecContent {Source = $"{main_project_name}.exe", Target = @"lib\net45"},
+            new NuSpecContent {Source = $"{main_project_name}.exe.config", Target = @"lib\net45"},
+        },
         ReleaseNotes            = Context.Data.Get<BuildData>().ReleaseNotes,
         BasePath                = $"./src/{main_project_name}/bin/{configuration}",
         OutputDirectory         = $"{artifacts}/nuget"
@@ -414,8 +416,7 @@ Task("AttachGitHubReleaseArtifacts")
 {
     var globalReleaseNotesFile = MakeAbsolute(File("./GLOBALRELEASENOTES.md")).FullPath;
     release_files += $",{globalReleaseNotesFile}";
-    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{git_version.SemVer}",
-        release_files,
+    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{git_version.SemVer}", release_files,
         new GitReleaseManagerAddAssetsSettings {
             WorkingDirectory  = $"{artifacts}/releases",
             ToolTimeout       = tool_timeout,
