@@ -23,14 +23,23 @@ namespace WindowsFormsApp
         {
             if (_updateInProgress)
             {
-                var dr = MessageBox.Show(
-                    "The updade process has not yet finished, do you want to close anyway?\nIt is strongly recommended to wait for the updade to complete.",
-                    "Update in progress...", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-
-                if (dr != DialogResult.Yes)
+                e.Cancel = true;
+                MessageBoxQueue.Add(() =>
                 {
-                    e.Cancel = true;
-                }
+                    TouchGui(() =>
+                    {
+                        var dr = MessageBox.Show(
+                            "The updade process has not yet finished, do you want to close anyway?\nIt is strongly recommended to wait for the updade to complete.",
+                            "Update in progress...", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                        MessageBoxQueue.SetFree();
+
+                        if (dr == DialogResult.Yes)
+                        {
+                            _updateInProgress = false;
+                            Close();
+                        }
+                    });
+                });
             }
         }
 
@@ -60,7 +69,7 @@ namespace WindowsFormsApp
                             var output = updateLogTextBox.Text;
                             var substring = output.Substring(0, duplicateIndex - 12).TrimEnd(Environment.NewLine.ToCharArray());
 
-                            output = output.Remove(0, substring.Length);
+                            output = output.Remove(0, duplicateIndex);
                             var newLineIndex = output.IndexOf(Environment.NewLine, StringComparison.InvariantCultureIgnoreCase);
                             string remaining = null;
                             if (newLineIndex > 0)
@@ -103,42 +112,50 @@ namespace WindowsFormsApp
 
             appUpdate.GotReleaseNotes += args =>
             {
-                TouchGui(() =>
+                var notes = new StringBuilder();
+                notes.AppendLine("New version available, those are the release notes:\n");
+
+                foreach (var entry in args.ReleaseNotes)
                 {
-                    var notes = new StringBuilder();
-                    notes.AppendLine("New version available, those are the release notes:\n");
+                    notes.AppendLine($"Version {entry.Version}: {entry.ReleaseNotes}");
+                }
 
-                    foreach (var entry in args.ReleaseNotes)
+                MessageBoxQueue.Add(() =>
+                {
+                    TouchGui(() =>
                     {
-                        notes.AppendLine($"Version {entry.Version}: {entry.ReleaseNotes}");
-                    }
-
-                    MessageBox.Show(notes.ToString(), "Release Notes", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show(notes.ToString(), "Release Notes", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBoxQueue.SetFree();
+                    });
                 });
             };
 
             appUpdate.UpdateDone += () =>
             {
-                TouchGui(() =>
+                TouchGui(() => { Text = "Windows Forms App - MainForm [done]"; });
+
+                if (appUpdate.State == UpdateState.Done)
                 {
-                    Text = "Windows Forms App - MainForm [done]";
-
-                    if (appUpdate.State == UpdateState.Done)
+                    MessageBoxQueue.Add(() =>
                     {
-                        var dr = MessageBox.Show("Update applied, do you want to restart the app?", "Restart needed", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-
-                        if (dr == DialogResult.Yes)
+                        TouchGui(() =>
                         {
-                            WindowState = FormWindowState.Minimized;
-                            Visible = false;
-                            AppUpdate.RestartApp();
-                        }
-                    }
-                    else
-                    {
-                        //MessageBox.Show("No update found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                });
+                            var dr = MessageBox.Show("Update applied, do you want to restart the app?", "Restart needed", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                            MessageBoxQueue.SetFree();
+
+                            if (dr == DialogResult.Yes)
+                            {
+                                WindowState = FormWindowState.Minimized;
+                                Visible = false;
+                                AppUpdate.RestartApp();
+                            }
+                        });
+                    });
+                }
+                else
+                {
+                    //MessageBox.Show("No update found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             };
 
             try
@@ -191,8 +208,16 @@ namespace WindowsFormsApp
                 {
                     Text = "Windows Forms App - MainForm [backgroung]";
                     updateLogTextBox.AppendLine("[Timeout!] Update task put into background");
-                    const string msg = "Ok, at this point the update process may have ended or not, but it seems to be taking a long time to respond, so let's leave it in the background and allow the app to continue working on other things.";
-                    MessageBox.Show(msg, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                });
+
+                const string msg = "Ok, at this point the update process may have ended or not, but it seems to be taking a long time to respond, so let's leave it in the background and allow the app to continue working on other things.";
+                MessageBoxQueue.Add(() =>
+                {
+                    TouchGui(() =>
+                    {
+                        MessageBox.Show(msg, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        MessageBoxQueue.SetFree();
+                    });
                 });
             }
             catch (TimeoutException ex)
@@ -218,7 +243,15 @@ namespace WindowsFormsApp
                     Text = "Windows Forms App - MainForm [error]";
                     updateLogTextBox.AppendLine("Update error");
                     updateLogTextBox.AppendLine(msg);
-                    MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                });
+
+                MessageBoxQueue.Add(() =>
+                {
+                    TouchGui(() =>
+                    {
+                        MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBoxQueue.SetFree();
+                    });
                 });
             }
         }
