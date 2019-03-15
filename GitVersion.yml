@@ -94,3 +94,13 @@ branches:
     tracks-release-branches: true
     is-release-branch: false
     source-branches: ['master', 'develop', 'feature', 'hotfix', 'support']
+  beta:
+    regex: beta?[/-]
+    mode: ContinuousDelivery
+    tag: beta
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    tracks-release-branches: false
+    is-release-branch: true
+    
