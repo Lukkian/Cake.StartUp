@@ -58,6 +58,10 @@ namespace WindowsFormsApp
                 return false;
             }
 
+            //https://stackoverflow.com/questions/2859790/the-request-was-aborted-could-not-create-ssl-tls-secure-channel
+            ServicePointManager.Expect100Continue = true;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
             using (var manager = await UpdateManager.GitHubUpdateManager(updateUrl).ConfigureAwait(false))
             {
                 return await CheckForUpdatesAsync(manager, updateUrl, log, token, restartOnSuccess).ConfigureAwait(false);

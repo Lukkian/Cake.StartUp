@@ -29,7 +29,7 @@ namespace WindowsFormsApp
                     TouchGui(() =>
                     {
                         var dr = MessageBox.Show(
-                            "The updade process has not yet finished, do you want to close anyway?\nIt is strongly recommended to wait for the updade to complete.",
+                            $"The updade process has not yet finished, do you want to close anyway?{Environment.NewLine}It is strongly recommended to wait for the updade to complete.",
                             "Update in progress...", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                         MessageBoxQueue.SetFree();
 
@@ -113,7 +113,7 @@ namespace WindowsFormsApp
             appUpdate.GotReleaseNotes += args =>
             {
                 var notes = new StringBuilder();
-                notes.AppendLine("New version available, those are the release notes:\n");
+                notes.AppendLine($"New version available, those are the release notes:{Environment.NewLine}");
 
                 foreach (var entry in args.ReleaseNotes)
                 {
@@ -174,7 +174,7 @@ namespace WindowsFormsApp
                         if (t.Exception != null)
                         {
                             var ex = t.Exception.GetBaseException();
-                            TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}\nStackTrace: {ex.StackTrace}"));
+                            TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}"));
                         }
                         TouchGui(() => updateLogTextBox.AppendLine("[DoneLocalUpdate]"));
                         _updateInProgress = false;
@@ -196,7 +196,7 @@ namespace WindowsFormsApp
                         if (t.Exception != null)
                         {
                             var ex = t.Exception.GetBaseException();
-                            TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}\nStackTrace: {ex.StackTrace}"));
+                            TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}"));
                         }
                         TouchGui(() => updateLogTextBox.AppendLine("[DoneRemoteUpdate]"));
                         _updateInProgress = false;
@@ -224,7 +224,7 @@ namespace WindowsFormsApp
             {
                 TouchGui(() =>
                 {
-                    updateLogTextBox.AppendLine($"TimeoutException: {ex.Message}\n{ex.StackTrace}");
+                    updateLogTextBox.AppendLine($"TimeoutException: {ex.Message}{Environment.NewLine}{ex.StackTrace}");
                 });
             }
             catch (Exception ex)
@@ -236,20 +236,20 @@ namespace WindowsFormsApp
                     innerEx = innerEx.InnerException;
                 }
 
-                var msg = $"{ex.Message}\n{innerEx?.Message}\n{ex.StackTrace}".Replace("\n\n", "\n");
+                var log = $"{ex.GetType().Name}: {ex.Message} {innerEx?.Message}{Environment.NewLine}{ex.StackTrace}";
+                var msg = $"{ex.Message} {innerEx?.Message}";
 
                 TouchGui(() =>
                 {
                     Text = "Windows Forms App - MainForm [error]";
-                    updateLogTextBox.AppendLine("Update error");
-                    updateLogTextBox.AppendLine(msg);
+                    updateLogTextBox.AppendLine(log);
                 });
 
                 MessageBoxQueue.Add(() =>
                 {
                     TouchGui(() =>
                     {
-                        MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         MessageBoxQueue.SetFree();
                     });
                 });
