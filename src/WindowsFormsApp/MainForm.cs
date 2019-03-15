@@ -63,14 +63,14 @@ namespace WindowsFormsApp
                 {
                     string RemoveDuplicate(string duplicate)
                     {
-                        var duplicateIndex = updateLogTextBox.Text.IndexOf(duplicate, StringComparison.InvariantCultureIgnoreCase);
+                        var duplicateIndex = updateLogTextBox.Text.IndexOf(duplicate, StringComparison.OrdinalIgnoreCase);
                         if (duplicateIndex > 0 && msg.Contains(duplicate))
                         {
                             var output = updateLogTextBox.Text;
-                            var substring = output.Substring(0, duplicateIndex - 12).TrimEnd(Environment.NewLine.ToCharArray());
+                            var substring = output.Substring(0, duplicateIndex - "[HH:mm:ss]: ".Length).TrimEnd(Environment.NewLine.ToCharArray());
 
                             output = output.Remove(0, duplicateIndex);
-                            var newLineIndex = output.IndexOf(Environment.NewLine, StringComparison.InvariantCultureIgnoreCase);
+                            var newLineIndex = output.IndexOf(Environment.NewLine, StringComparison.Ordinal);
                             string remaining = null;
                             if (newLineIndex > 0)
                             {
