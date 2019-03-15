@@ -93,7 +93,7 @@ branches:
     track-merge-target: true
     tracks-release-branches: true
     is-release-branch: false
-    source-branches: ['master', 'develop', 'feature', 'hotfix', 'support']
+    source-branches: ['master', 'release', 'feature', 'pull-request', 'hotfix', 'support', 'develop']
   beta:
     regex: beta?[/-]
     mode: ContinuousDelivery
@@ -103,4 +103,4 @@ branches:
     track-merge-target: false
     tracks-release-branches: false
     is-release-branch: true
-    
+    source-branches: ['master', 'release', 'feature', 'pull-request', 'hotfix', 'support', 'develop']
