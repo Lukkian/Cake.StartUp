@@ -1,12 +1,11 @@
 #tool nuget:?package=NUnit.ConsoleRunner&version=3.9.0
 #tool nuget:?package=GitVersion.CommandLine&version=4.0.0
 #tool nuget:?package=gitreleasemanager&version=0.8.0
-#addin nuget:?package=Newtonsoft.Json&version=12.0.1
-#addin nuget:?package=Cake.FileHelpers&version=3.1.0
-
-// Squirrel: It's like ClickOnce but Works
 #tool nuget:?package=squirrel.windows&version=1.9.1
 #addin nuget:?package=Cake.Squirrel&version=0.14.0
+#addin nuget:?package=Newtonsoft.Json&version=12.0.1
+#addin nuget:?package=Cake.FileHelpers&version=3.1.0
+#addin nuget:?package=Cake.Git&version=0.19.0
 
 // To debug in dotnet core [preliminar support], otherwise use: #addin nuget:?package=Cake.Powershell&version=0.4.7
 //#addin nuget:?package=Lukkian.Cake.Powershell&version=0.4.9
@@ -22,11 +21,15 @@
 // Invoke-WebRequest https://cakebuild.net/download/bootstrapper/windows -OutFile build.ps1
 
 //////////////////////////////////////////////////////////////////////
-// ARGUMENTS
+// HELP
 //////////////////////////////////////////////////////////////////////
 
 //.\build.ps1 --configuration="Debug"
 //.\build.ps1 --configuration="Debug" --publish=true
+
+//////////////////////////////////////////////////////////////////////
+// ARGUMENTS
+//////////////////////////////////////////////////////////////////////
 
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
@@ -47,7 +50,7 @@ var app_install_description = "A simple Cake StartUp sample wtih Squirrel.Window
 var test_target = "*tests";
 var artifacts = "./artifacts";
 var solution_path = $"./src/{solution}.sln";
-var git_version = (GitVersion)null;
+var local_release_dir = @"C:\MyAppUpdates";
 
 var gh_owner = "Lukkian";
 var gh_repo = "Cake.StartUp";
@@ -57,29 +60,75 @@ var grm_log = $"{artifacts}/GitReleaseManager.log";
 var release_files = (string)null;
 var tool_timeout = TimeSpan.FromMinutes(5);
 
+var git_version = (GitVersion)null;
+var git_version_settings = new GitVersionSettings {
+    RepositoryPath = ".",
+    LogFilePath = $"{artifacts}/GitVersion.log",
+    OutputType = GitVersionOutput.Json,
+    UpdateAssemblyInfo = false
+};
+
 //////////////////////////////////////////////////////////////////////
 // CUSTOM FUNCTIONS
 //////////////////////////////////////////////////////////////////////
 
 bool IsReleaseMode() => StringComparer.OrdinalIgnoreCase.Equals(configuration, "Release");
-bool ShouldPatchAssemblyInfo() => true;//AppVeyor.IsRunningOnAppVeyor;
+bool IsReleaseBranch()
+{
+    var branch = git_version?.BranchName.ToLowerInvariant();
+
+    switch (branch)
+    {
+        case"master": return true;
+        case"beta": return true;
+        case"develop": return false;
+        default: return false;
+    }
+}
+bool ShouldPatchAssemblyInfo() => true;
 bool ShouldResetAssemblyInfo() => BuildSystem.IsLocalBuild;
-bool ShouldPublishReleaseOnGitHub()
+bool ShouldPublishRelease()
 {
     var haveVersion = git_version != null;
-
-    var forcePublish = string.IsNullOrWhiteSpace(publish) == false;
     
-    var isInReleaseBranch = StringComparer.OrdinalIgnoreCase.Equals(release_branch, git_version?.BranchName);
+    var isInReleaseBranch = IsReleaseBranch();
 
-    if(haveVersion && (forcePublish || isInReleaseBranch))
+    if(haveVersion && isInReleaseBranch)
     {
-        if(AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag == false)
+        var gitDescribe = GitDescribe("./", git_version.Sha, false, GitDescribeStrategy.All, 0);
+        
+        if (gitDescribe.StartsWith("tags/"))
         {
-            return false;
+            return true;
         }
+    }
 
-        return true;
+    return false;
+}
+bool ShouldPublishReleaseLocal()
+{
+    var shouldPublishReleaseLocal = ShouldPublishRelease();
+
+    if(shouldPublishReleaseLocal)
+    {
+        if(BuildSystem.IsLocalBuild)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+bool ShouldPublishReleaseOnGitHub()
+{
+    var shouldPublishReleaseLocal = ShouldPublishRelease();
+
+    if(shouldPublishReleaseLocal)
+    {
+        if(AppVeyor.IsRunningOnAppVeyor && AppVeyor.Environment.Repository.Tag.IsTag)
+        {
+            return true;
+        }
     }
 
     return false;
@@ -104,6 +153,23 @@ Setup<BuildData>(ctx =>
 	Information($"Solution: {solution_path}");
 	Information($"Main project: ./src/{main_project_name}/{main_project_name}.csproj");
     Information($"Mode: {configuration}");
+
+    var lastCommit = GitLogTip("./");
+
+    Information(
+        @"Last commit {0}
+        Short message: {1}
+        Author:        {2}
+        Authored:      {3:yyyy-MM-dd HH:mm:ss}
+        Committer:     {4}
+        Committed:     {5:yyyy-MM-dd HH:mm:ss}",
+        lastCommit.Sha,
+        lastCommit.MessageShort,
+        lastCommit.Author.Name,
+        lastCommit.Author.When,
+        lastCommit.Committer.Name,
+        lastCommit.Committer.When
+    );
 
     return new BuildData();
 });
@@ -156,7 +222,7 @@ Teardown<BuildData>((ctx, data) =>
     }
     else
     {
-        Information("There were no errors during the execution of the build tasks");
+        Information("There were no errors in BuildData");
     }
 });
 
@@ -188,33 +254,79 @@ Task("Clean")
     CleanDirectory($"{artifacts}/nuget");
 });
 
+Task("CreateReleaseTag")
+    .WithCriteria(BuildSystem.IsLocalBuild)
+    .Does(() =>
+{
+    git_version = GitVersion(git_version_settings);
+
+    var theTag = $"v{git_version.SemVer}";
+
+    var tags = GitTags("./");
+
+    if(tags.Exists(t => string.Equals(t.FriendlyName, theTag, StringComparison.OrdinalIgnoreCase)))
+    {
+        Warning($"tag already exists in this reporsitory: {theTag}");
+
+        foreach (var t in tags)
+        {
+            Information($"tag: {t.FriendlyName}");
+        }
+
+        return;
+    }
+
+    Information($"Tagging current commit with value {theTag}");
+    
+    GitTag(@"./", theTag, git_version.Sha);
+
+    git_version = GitVersion(git_version_settings);
+});
+
+Task("PushReleaseTag")
+    .IsDependentOn("CreateReleaseTag")
+    .WithCriteria(BuildSystem.IsLocalBuild)
+    .Does(() =>
+{
+    var gitUser = "gitUser";
+    var gitPassword = "gitPassword";
+
+    var theTag = $"v{git_version.SemVer}";
+
+    Information($"Push tag {theTag} to remote repository");
+    
+    // Push a tag to a remote authenticated
+    GitPushRef(@"./", gitUser, gitPassword, "origin", theTag);
+
+    // Push a tag to a remote unauthenticated
+    //GitPushRef(@"./", "origin", theTag);
+});
+
+Task("CheckCurrentCommitTag")
+    .Does(() =>
+{
+    git_version = GitVersion(git_version_settings);
+
+    var gitDescribe = GitDescribe("./", git_version.Sha, false, GitDescribeStrategy.All, 0);
+    
+    Information($"{git_version.Sha} HasTag: {gitDescribe.StartsWith("tags/")} - {gitDescribe}");
+});
+
 Task("RunGitVersion")
     .Does(() =>
 {
-    git_version = GitVersion(new GitVersionSettings {
-        RepositoryPath = ".",
-        LogFilePath = $"{artifacts}/GitVersion.log",
-        OutputType = GitVersionOutput.Json,
-        UpdateAssemblyInfo = ShouldPatchAssemblyInfo()
-    });
-    
-    Information($"Full GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(git_version)}");
-});
+    git_version_settings.UpdateAssemblyInfo = ShouldPatchAssemblyInfo();
 
-Task("CheckAndUpdateAppVeyorBuild")
-    .IsDependentOn("RunGitVersion")
-    .Does(() =>
-{
+    git_version = GitVersion(git_version_settings);
+
+    git_version_settings.UpdateAssemblyInfo = false;
+    
+    Information($"GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(git_version)}");
+
     if (AppVeyor.IsRunningOnAppVeyor)
     {
-        StartPowershellFile("./appveyor.ps1", args => { args.Append("Version", $"{git_version.FullSemVer}.b{AppVeyor.Environment.Build.Number}"); });
-        Information($"AppVeyor Info");
-        Information($"    Folder: {AppVeyor.Environment.Build.Folder}");
-        Information($"    Number: {AppVeyor.Environment.Build.Number}");
-    }
-    else
-    {
-        Information("Not running on AppVeyor");
+        AppVeyor.UpdateBuildVersion($"{git_version.FullSemVer}.b{AppVeyor.Environment.Build.Number}");
+        Information($"AppVeyor.Environment.Build.Version: {AppVeyor.Environment.Build.Version}");
     }
 });
 
@@ -227,7 +339,6 @@ Task("RestoreNuGetPackages")
 Task("Build")
     .IsDependentOn("Clean")
     .IsDependentOn("RestoreNuGetPackages")
-    .IsDependentOn("CheckAndUpdateAppVeyorBuild")
     .Does(() =>
 {
 	Information("Building solution...");
@@ -265,7 +376,13 @@ Task("UnitTests")
     .Does(() =>
 {
     Information($"Pattern: {test_target}");
-    NUnit3($"./src/**/bin/{configuration}/{test_target}.dll", new NUnit3Settings { NoResults = true });
+    
+    NUnit3($"./src/**/bin/{configuration}/{test_target}.dll", new NUnit3Settings { NoResults = false, OutputFile = "./TestResult.xml" });
+    
+    if (AppVeyor.IsRunningOnAppVeyor)
+    {
+        AppVeyor.UploadTestResults("./TestResult.xml", AppVeyorTestResultsType.NUnit3);
+    }
 });
 
 Task("ReadReleaseNotes")
@@ -285,6 +402,8 @@ Task("ReadReleaseNotes")
     
     var data = Context.Data.Get<BuildData>();
     data.SetReleaseNotes(releaseNotes);
+
+    Information("Release notes processed, see teardown...");
 });
 
 Task("NuGetPackage")
@@ -356,6 +475,28 @@ Task("SquirrelPackage")
     release_files = files.Select(f => f.GetFilename()).Aggregate((a, b) => $"{a},{b}").ToString();
 });
 
+Task("CreateLocalRelease")
+    .IsDependentOn("RunGitVersion")
+    .IsDependentOn("SquirrelPackage")
+    .WithCriteria(() => ShouldPublishReleaseLocal())
+    .WithCriteria(() => HasErrors() == false)
+    .Does(() =>
+{
+    Information($"Check source directory: {artifacts}/releases");
+    Information($"Check target directory: {local_release_dir}");
+    if (DirectoryExists(local_release_dir))
+    {
+        Information("Coping files...");
+        CopyFiles($"{artifacts}/releases/*", local_release_dir);
+    }
+    Information($"Release pushed to directory: {local_release_dir}");
+}).OnError(exception => {
+    Error(exception);
+    var data = Context.Data.Get<BuildData>();
+    data.HasError = true;
+    data.AddError(exception.Message);
+});
+
 Task("CreateGitHubRelease")
     .IsDependentOn("RunGitVersion")
     .IsDependentOn("SquirrelPackage")
@@ -368,8 +509,8 @@ Task("CreateGitHubRelease")
         //Milestone         = gitVersion.SemVer,
         Name              = $"v{git_version.SemVer}",
         InputFilePath     = "./RELEASENOTES.md",
-        Prerelease        = false,
-        TargetCommitish   = "master",
+        Prerelease        = !string.IsNullOrWhiteSpace(git_version.PreReleaseTag),
+        TargetCommitish   = git_version.BranchName,
         WorkingDirectory  = $"{artifacts}/releases",
         ToolTimeout       = tool_timeout,
         LogFilePath       = grm_log
@@ -421,8 +562,13 @@ Task("AttachGitHubReleaseArtifacts")
             WorkingDirectory  = $"{artifacts}/releases",
             ToolTimeout       = tool_timeout,
             LogFilePath       = grm_log
-        });
-    Information("Files attached to the release: {0}", release_files);
+    });
+
+    Information($"Files attached to the release: (WorkingDirectory: {artifacts}/releases)");
+    foreach (var file in release_files.Split(','))
+    {
+        Information($"    >{file}");
+    }
 }).OnError(exception => {
     Error(exception);
     var data = Context.Data.Get<BuildData>();
@@ -435,6 +581,7 @@ Task("AttachGitHubReleaseArtifacts")
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
+    .IsDependentOn("CreateLocalRelease")
     .IsDependentOn("ResetAssemblyInfoVersion")
     .IsDependentOn("AttachGitHubReleaseArtifacts");
 

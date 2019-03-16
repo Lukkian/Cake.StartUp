@@ -21,6 +21,7 @@ branches:
     - master
     - production
     - develop
+    - beta
     - /release/.*/
     - /hotfix/.*/
   # blacklist

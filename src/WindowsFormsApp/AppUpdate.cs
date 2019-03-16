@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using NuGet;
 using Squirrel;
 
 namespace WindowsFormsApp
@@ -15,6 +16,8 @@ namespace WindowsFormsApp
         public UpdateState State { get; private set; }
         public CancellationTokenSource Token { get; private set; }
         public bool FakeUpdate { get; set; }
+        public bool AllowUnstable { get; set; }
+        private SemanticVersion _lastUpdateVersion;
 
         public async Task<bool> CheckForUpdatesOnLocalNetwordkAsync(string updatePath, Action<string> log, CancellationTokenSource token, bool restartOnSuccess)
         {
@@ -72,7 +75,6 @@ namespace WindowsFormsApp
         {
             Token = token;
             State = UpdateState.Checking;
-            log("Contacting update server...");
 
             log("Checking for updates...");
 
@@ -92,16 +94,42 @@ namespace WindowsFormsApp
             // Check if we have any update
             if (updateInfo.ReleasesToApply.Any())
             {
-                State = UpdateState.Downloading;
-                log("New version available!");
-
                 var currentVersion = updateInfo.CurrentlyInstalledVersion?.Version.ToString();
                 var futureVersion = updateInfo.FutureReleaseEntry.Version;
 
-                log($"Current installed version: {currentVersion}");
+                if (_lastUpdateVersion != null)
+                {
+                    var hasUpdateToApply = futureVersion.CompareTo(_lastUpdateVersion) < 0;
+                    if (hasUpdateToApply)
+                    {
+                        State = UpdateState.RestartNeeded;
+                        UpdateDone?.Invoke();
+                        log("Please restart the app before checking for updates");
+                        return false;
+                    }
+                }
+
+                log("New version available!");
+
+                log($"Installed version: {currentVersion}");
                 log($"New version: {futureVersion}");
 
+                if (string.IsNullOrWhiteSpace(futureVersion.SpecialVersion) == false)
+                {
+                    if (AllowUnstable == false)
+                    {
+                        State = UpdateState.UnstableVersion;
+                        UpdateDone?.Invoke();
+                        log("Beta or Unstable versions are not allowed, update canceled!");
+                        return false;
+                    }
+
+                    log("Warnning: updating to a Beta or Unstable version!");
+                }
+
                 log("The application will now download and apply the update...");
+
+                State = UpdateState.Downloading;
 
                 log("Downloading update 0%");
 
@@ -139,7 +167,7 @@ namespace WindowsFormsApp
                 else
                 {
                     GotReleaseNotes?.Invoke(new GotUpdateReleaseNotesEventArgs(cleanReleaseNotes));
-                    log("Release notes:");
+                    log("Release notes...");
                     log(releaseNotes.ToString().TrimEnd(Environment.NewLine.ToCharArray()));
                 }
 
@@ -152,7 +180,7 @@ namespace WindowsFormsApp
                 else
                 {
                     log("Updating 0%");
-                    // Do the update
+
                     await manager.UpdateApp(i =>
                     {
                         if (token == null || token.IsCancellationRequested == false)
@@ -167,10 +195,12 @@ namespace WindowsFormsApp
                     }).ConfigureAwait(false);
                 }
 
-                // I do not know if it's an error, but Squirrel always ends the update process with 99%
+                // Don't know if it's an error, but Squirrel always ends the update process with 99%
                 log("Updating 100%");
 
                 log("Update completed successfully");
+
+                _lastUpdateVersion = futureVersion;
 
                 State = UpdateState.Done;
             }
@@ -294,6 +324,8 @@ namespace WindowsFormsApp
         NotInstalledApp,
         InvalidUpdatePath,
         CantConecctServer,
-        init
+        init,
+        UnstableVersion,
+        RestartNeeded
     }
 }

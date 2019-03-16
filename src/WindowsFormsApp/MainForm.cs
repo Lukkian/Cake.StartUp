@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -51,7 +50,7 @@ namespace WindowsFormsApp
 
         private async Task CheckForUpdates()
         {
-            var appUpdate = new AppUpdate();
+            var appUpdate = new AppUpdate { AllowUnstable = true, FakeUpdate = false };
 
 #if DEBUG
             appUpdate.FakeUpdate = true;
@@ -61,39 +60,20 @@ namespace WindowsFormsApp
             {
                 TouchGui(() =>
                 {
-                    string RemoveDuplicate(string duplicate)
+                    void RemoveDuplicate(string duplicate)
                     {
-                        var duplicateIndex = updateLogTextBox.Text.IndexOf(duplicate, StringComparison.OrdinalIgnoreCase);
-                        if (duplicateIndex > 0 && msg.Contains(duplicate))
+                        var lastLine = updateLogTextBox.Text.TakeLastLine() ?? string.Empty;
+
+                        if (lastLine.Contains(duplicate) && msg.Contains(duplicate))
                         {
-                            var output = updateLogTextBox.Text;
-                            var substring = output.Substring(0, duplicateIndex - "[HH:mm:ss]: ".Length).TrimEnd(Environment.NewLine.ToCharArray());
-
-                            output = output.Remove(0, duplicateIndex);
-                            var newLineIndex = output.IndexOf(Environment.NewLine, StringComparison.Ordinal);
-                            string remaining = null;
-                            if (newLineIndex > 0)
-                            {
-                                remaining = output.Substring(newLineIndex);
-                            }
-
-                            updateLogTextBox.Text = substring;
-                            msg = $"{msg}{remaining}".Trim();
-                            //msg = $"{substring}{msg}{remaining}".Trim();
-                            //updateLogTextBox.Clear();
+                            updateLogTextBox.Text = updateLogTextBox.Text.Replace(lastLine, string.Empty).TrimEnd();
                         }
-
-                        return msg;
                     }
 
-                    const string downloadingMsg = "Downloading update";
-                    msg = RemoveDuplicate(downloadingMsg);
-
-                    const string updatingMsg = "Updating";
-                    msg = RemoveDuplicate(updatingMsg);
+                    RemoveDuplicate("Downloading update");
+                    RemoveDuplicate("Updating");
 
                     updateLogTextBox.AppendLine(msg);
-                    //updateLogTextBox.Text += msg;
 
                     switch (appUpdate.State)
                     {
@@ -133,29 +113,6 @@ namespace WindowsFormsApp
             appUpdate.UpdateDone += () =>
             {
                 TouchGui(() => { Text = "Windows Forms App - MainForm [done]"; });
-
-                if (appUpdate.State == UpdateState.Done)
-                {
-                    MessageBoxQueue.Add(() =>
-                    {
-                        TouchGui(() =>
-                        {
-                            var dr = MessageBox.Show("Update applied, do you want to restart the app?", "Restart needed", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-                            MessageBoxQueue.SetFree();
-
-                            if (dr == DialogResult.Yes)
-                            {
-                                WindowState = FormWindowState.Minimized;
-                                Visible = false;
-                                AppUpdate.RestartApp();
-                            }
-                        });
-                    });
-                }
-                else
-                {
-                    //MessageBox.Show("No update found.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
             };
 
             try
@@ -163,10 +120,12 @@ namespace WindowsFormsApp
                 updateLogTextBox.AppendLine("Starting Check for Updates");
                 _updateInProgress = true;
                 var timeout = TimeSpan.FromSeconds(5);
-                updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
+
+                var localUpdateState = UpdateState.None;
 
                 const string updatePath = @"C:\MyAppUpdates";
                 updateLogTextBox.AppendLine($"Checking for local updates on path: {updatePath}");
+                updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
                 var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, new CancellationTokenSource(), false);
                 await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(appUpdate.Token).Wait(timeout)
                     .Run(t =>
@@ -176,8 +135,12 @@ namespace WindowsFormsApp
                             var ex = t.Exception.GetBaseException();
                             TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}"));
                         }
+
                         TouchGui(() => updateLogTextBox.AppendLine("[DoneLocalUpdate]"));
+
                         _updateInProgress = false;
+
+                        localUpdateState = appUpdate.State;
                     }).ConfigureAwait(true);
 
                 // Wait for all messages to be logged
@@ -186,9 +149,12 @@ namespace WindowsFormsApp
                     await Task.Delay(1000);
                 } while (_updateInProgress);
 
+                UpdateState remoteUpdateState;
+
                 _updateInProgress = true;
                 const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
                 updateLogTextBox.AppendLine($"Checking for remote updates on server: {updateUrl}");
+                updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
                 var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, new CancellationTokenSource(), false);
                 await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(appUpdate.Token).Wait(timeout)
                     .Run(t =>
@@ -198,8 +164,32 @@ namespace WindowsFormsApp
                             var ex = t.Exception.GetBaseException();
                             TouchGui(() => updateLogTextBox.AppendLine($"{ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}"));
                         }
+
                         TouchGui(() => updateLogTextBox.AppendLine("[DoneRemoteUpdate]"));
+
                         _updateInProgress = false;
+
+                        remoteUpdateState = appUpdate.State;
+
+                        if (localUpdateState == UpdateState.Done || remoteUpdateState == UpdateState.Done)
+                        {
+                            MessageBoxQueue.Add(() =>
+                            {
+                                TouchGui(() =>
+                                {
+                                    var dr = MessageBox.Show("Update applied, do you want to restart the app?", "Restart needed", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                                    MessageBoxQueue.SetFree();
+
+                                    if (dr == DialogResult.Yes)
+                                    {
+                                        WindowState = FormWindowState.Minimized;
+                                        Visible = false;
+                                        AppUpdate.RestartApp();
+                                    }
+                                });
+                            });
+                        }
+
                     }).ConfigureAwait(true);
             }
             catch (OperationCanceledException)
@@ -263,11 +253,13 @@ namespace WindowsFormsApp
 
         private void ShowAppVersion()
         {
-            var version = Assembly.GetEntryAssembly().GetName().Version;
+            var version = Application.ProductVersion;
 
-            // remove revision number
-            version = new Version(version.Major, version.Minor, version.Build);
-
+            if (version.IndexOf('+') > 0)
+            {
+                version = version.Remove(version.IndexOf('+'));
+            }
+            
 #if DEBUG
             updateLogTextBox.Text = $"Version: {version}-debug";
 #else
