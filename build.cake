@@ -260,13 +260,13 @@ Task("CreateReleaseTag")
 {
     git_version = GitVersion(git_version_settings);
 
-    var theTag = $"v{git_version.SemVer}";
+    var tag = $"v{git_version.SemVer}";
 
     var tags = GitTags("./");
 
-    if(tags.Exists(t => string.Equals(t.FriendlyName, theTag, StringComparison.OrdinalIgnoreCase)))
+    if(tags.Exists(t => string.Equals(t.FriendlyName, tag, StringComparison.OrdinalIgnoreCase)))
     {
-        Warning($"tag already exists in this reporsitory: {theTag}");
+        Warning($"tag already exists in this reporsitory: {tag}");
 
         foreach (var t in tags)
         {
@@ -275,31 +275,26 @@ Task("CreateReleaseTag")
 
         return;
     }
-
-    Information($"Tagging current commit with value {theTag}");
     
-    GitTag(@"./", theTag, git_version.Sha);
+    GitTag(@"./", tag, git_version.Sha);
 
     git_version = GitVersion(git_version_settings);
+
+    Information($"Tag current commit with value {tag}");
 });
 
 Task("PushReleaseTag")
     .IsDependentOn("CreateReleaseTag")
     .WithCriteria(BuildSystem.IsLocalBuild)
+    .WithCriteria(false == string.IsNullOrWhiteSpace(gh_token))
     .Does(() =>
 {
-    var gitUser = "gitUser";
-    var gitPassword = "gitPassword";
+    var tag = $"v{git_version.SemVer}";
 
-    var theTag = $"v{git_version.SemVer}";
+    // Push a tag to GitHub with token authentication
+    GitPushRef(@"./", gh_token, "", "origin", tag);
 
-    Information($"Push tag {theTag} to remote repository");
-    
-    // Push a tag to a remote authenticated
-    GitPushRef(@"./", gitUser, gitPassword, "origin", theTag);
-
-    // Push a tag to a remote unauthenticated
-    //GitPushRef(@"./", "origin", theTag);
+    Information($"Push tag {tag} to remote repository");
 });
 
 Task("CheckCurrentCommitTag")
@@ -322,6 +317,7 @@ Task("RunGitVersion")
     git_version_settings.UpdateAssemblyInfo = false;
     
     Information($"GitVersion: {Newtonsoft.Json.JsonConvert.SerializeObject(git_version)}");
+    Information($"GitVersion.SemVer: {git_version.SemVer}");
 
     if (AppVeyor.IsRunningOnAppVeyor)
     {

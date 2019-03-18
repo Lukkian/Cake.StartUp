@@ -345,3 +345,4 @@ healthchecksdb
 # Custom lib
 [Ll]ib/
 GLOBALRELEASENOTES.md
+credentials
