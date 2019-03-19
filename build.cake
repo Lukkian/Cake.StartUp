@@ -24,8 +24,21 @@
 // HELP
 //////////////////////////////////////////////////////////////////////
 
-//.\build.ps1 --configuration="Debug"
-//.\build.ps1 --configuration="Debug" --publish=true
+// Default build routine, will generate artifacts for current version depending on the current branch and tag
+//.\build.ps1
+
+// Create a tag in the current commit
+//.\build.ps1 --target="CreateReleaseTag"
+
+// Checks if the current commit is tagged
+//.\build.ps1 --target="CheckCurrentCommitTag"
+
+// Create a tag in the current commit (if does not exist) and push it to GitHub
+//.\build.ps1 --target="PushReleaseTag" --gh_token="the_token"
+
+// Same as PushReleaseTag
+//.\build.ps1 --target="CreateAndPushReleaseTag" --gh_token="the_token"
+
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
@@ -33,7 +46,7 @@
 
 var configuration = Argument("configuration", "Release");
 var target = Argument("target", "Default");
-var publish = Argument("publish", (string)null);
+var gh_token = EnvironmentVariable("gh_token") ?? Argument("gh_token", (string)null);
 
 //////////////////////////////////////////////////////////////////////
 // VARIABLES
@@ -54,8 +67,6 @@ var local_release_dir = @"C:\MyAppUpdates";
 
 var gh_owner = "Lukkian";
 var gh_repo = "Cake.StartUp";
-var release_branch = "master";
-var gh_token = EnvironmentVariable("gh_token") ?? Argument("gh_token", (string)null);
 var grm_log = $"{artifacts}/GitReleaseManager.log";
 var release_files = (string)null;
 var tool_timeout = TimeSpan.FromMinutes(5);
@@ -81,7 +92,7 @@ bool IsReleaseBranch()
     {
         case"master": return true;
         case"beta": return true;
-        case"develop": return false;
+        //case"develop": return false;
         default: return false;
     }
 }
@@ -214,7 +225,7 @@ Teardown<BuildData>((ctx, data) =>
 
     if (data.HasError)
     {
-        Error("There were one or more errors while executing the build tasks");
+        Error("There were one or more errors in BuildData");
         foreach(var error in data.Errors)
         {
             Error($"  >{error}");
@@ -286,7 +297,7 @@ Task("CreateReleaseTag")
 Task("PushReleaseTag")
     .IsDependentOn("CreateReleaseTag")
     .WithCriteria(BuildSystem.IsLocalBuild)
-    .WithCriteria(false == string.IsNullOrWhiteSpace(gh_token))
+    .WithCriteria(!string.IsNullOrWhiteSpace(gh_token))
     .Does(() =>
 {
     var tag = $"v{git_version.SemVer}";
@@ -367,7 +378,7 @@ Task("ResetAssemblyInfoVersion")
         }));
 });
 
-Task("UnitTests")
+Task("RunUnitTests")
     .IsDependentOn("Build")
     .Does(() =>
 {
@@ -381,7 +392,7 @@ Task("UnitTests")
     }
 });
 
-Task("ReadReleaseNotes")
+Task("FindReleaseNotes")
     .WithCriteria(() => IsReleaseMode())
 	.Does(() => 
 {
@@ -402,10 +413,10 @@ Task("ReadReleaseNotes")
     Information("Release notes processed, see teardown...");
 });
 
-Task("NuGetPackage")
-    .IsDependentOn("UnitTests")
+Task("CreateNuGetPackage")
+    .IsDependentOn("RunUnitTests")
     .IsDependentOn("RunGitVersion")
-    .IsDependentOn("ReadReleaseNotes")
+    .IsDependentOn("FindReleaseNotes")
     .WithCriteria(() => IsReleaseMode())
     .Does(() =>
 {
@@ -440,8 +451,8 @@ Task("NuGetPackage")
     NuGetPack($"./src/{main_project_name}/{main_project_name}.nuspec", nuGetPackSettings);
 });
 
-Task("SquirrelPackage")
-    .IsDependentOn("NuGetPackage")
+Task("CreateSquirrelPackage")
+    .IsDependentOn("CreateNuGetPackage")
     .IsDependentOn("RunGitVersion")
     .WithCriteria(() => IsReleaseMode())
 	.Does(() => 
@@ -473,7 +484,7 @@ Task("SquirrelPackage")
 
 Task("CreateLocalRelease")
     .IsDependentOn("RunGitVersion")
-    .IsDependentOn("SquirrelPackage")
+    .IsDependentOn("CreateSquirrelPackage")
     .WithCriteria(() => ShouldPublishReleaseLocal())
     .WithCriteria(() => HasErrors() == false)
     .Does(() =>
@@ -495,7 +506,7 @@ Task("CreateLocalRelease")
 
 Task("CreateGitHubRelease")
     .IsDependentOn("RunGitVersion")
-    .IsDependentOn("SquirrelPackage")
+    .IsDependentOn("CreateSquirrelPackage")
     .WithCriteria(() => ShouldPublishReleaseOnGitHub())
     .WithCriteria(() => HaveGitHubCredentials())
     .WithCriteria(() => HasErrors() == false)
@@ -543,7 +554,7 @@ Task("ExportGitHubReleaseNotes")
 
 Task("AttachGitHubReleaseArtifacts")
     .IsDependentOn("RunGitVersion")
-    .IsDependentOn("SquirrelPackage")
+    .IsDependentOn("CreateSquirrelPackage")
     .IsDependentOn("CreateGitHubRelease")
     .IsDependentOn("ExportGitHubReleaseNotes")
     .WithCriteria(() => ShouldPublishReleaseOnGitHub())
@@ -580,6 +591,9 @@ Task("Default")
     .IsDependentOn("CreateLocalRelease")
     .IsDependentOn("ResetAssemblyInfoVersion")
     .IsDependentOn("AttachGitHubReleaseArtifacts");
+
+Task("CreateAndPushReleaseTag")
+    .IsDependentOn("PushReleaseTag");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
