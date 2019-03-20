@@ -27,6 +27,7 @@ namespace WindowsFormsApp
                 {
                     TouchGui(() =>
                     {
+                        Activate();
                         var dr = MessageBox.Show(
                             $"The updade process has not yet finished, do you want to close anyway?{Environment.NewLine}It is strongly recommended to wait for the updade to complete.",
                             "Update in progress...", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -104,6 +105,7 @@ namespace WindowsFormsApp
                 {
                     TouchGui(() =>
                     {
+                        Activate();
                         MessageBox.Show(notes.ToString(), "Release Notes", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         MessageBoxQueue.SetFree();
                     });
@@ -175,6 +177,7 @@ namespace WindowsFormsApp
                             {
                                 TouchGui(() =>
                                 {
+                                    Activate();
                                     var dr = MessageBox.Show("Update applied, do you want to restart the app?", "Restart needed", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                                     MessageBoxQueue.SetFree();
 
@@ -203,6 +206,7 @@ namespace WindowsFormsApp
                 {
                     TouchGui(() =>
                     {
+                        Activate();
                         MessageBox.Show(msg, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         MessageBoxQueue.SetFree();
                     });
@@ -237,6 +241,7 @@ namespace WindowsFormsApp
                 {
                     TouchGui(() =>
                     {
+                        Activate();
                         MessageBox.Show(msg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         MessageBoxQueue.SetFree();
                     });
