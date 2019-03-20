@@ -124,8 +124,7 @@ namespace WindowsFormsApp
                 var localUpdateState = UpdateState.None;
 
                 const string updatePath = @"C:\MyAppUpdates";
-                updateLogTextBox.AppendLine($"Checking for local updates on path: {updatePath}");
-                updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
+                updateLogTextBox.AppendLine($"Starting update task with {timeout.TotalSeconds} seconds timeout");
                 var checkForUpdatesOnLocalNetwordkAsync = appUpdate.CheckForUpdatesOnLocalNetwordkAsync(updatePath, MessageLogs, new CancellationTokenSource(), false);
                 await new Activity<bool>().ForTask(checkForUpdatesOnLocalNetwordkAsync).WithToken(appUpdate.Token).Wait(timeout)
                     .Run(t =>
@@ -153,8 +152,7 @@ namespace WindowsFormsApp
 
                 _updateInProgress = true;
                 const string updateUrl = "https://github.com/Lukkian/Cake.StartUp";
-                updateLogTextBox.AppendLine($"Checking for remote updates on server: {updateUrl}");
-                updateLogTextBox.AppendLine($"Time limite: {timeout.TotalSeconds} seconds");
+                updateLogTextBox.AppendLine($"Starting update task with {timeout.TotalSeconds} seconds timeout");
                 var checkForUpdatesOnGitHubAsync = appUpdate.CheckForUpdatesOnGitHubAsync(updateUrl, MessageLogs, new CancellationTokenSource(), false);
                 await new Activity<bool>().ForTask(checkForUpdatesOnGitHubAsync).WithToken(appUpdate.Token).Wait(timeout)
                     .Run(t =>

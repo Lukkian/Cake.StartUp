@@ -42,6 +42,8 @@ namespace WindowsFormsApp
                 log($"File not found: {fi.FullName}");
                 return false;
             }
+            
+            log($"Checking for local updates on path: {updatePath}");
 
             using (var manager = new UpdateManager(di.FullName))
             {
@@ -64,6 +66,8 @@ namespace WindowsFormsApp
             //https://stackoverflow.com/questions/2859790/the-request-was-aborted-could-not-create-ssl-tls-secure-channel
             ServicePointManager.Expect100Continue = true;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            
+            log($"Checking for remote updates on server: {updateUrl}");
 
             using (var manager = await UpdateManager.GitHubUpdateManager(updateUrl).ConfigureAwait(false))
             {
