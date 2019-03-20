@@ -152,6 +152,7 @@ bool HaveGitHubCredentials()
     return haveGHC;
 }
 bool HasErrors() => Context.Data.Get<BuildData>().HasError;
+string GetTag() => git_version != null ? $"v{git_version.SemVer}" : throw new ArgumentNullException(nameof(git_version));
 
 //////////////////////////////////////////////////////////////////////
 // SETUP
@@ -271,7 +272,7 @@ Task("CreateReleaseTag")
 {
     git_version = GitVersion(git_version_settings);
 
-    var tag = $"v{git_version.SemVer}";
+    var tag = GetTag();
 
     var tags = GitTags("./");
 
@@ -291,7 +292,7 @@ Task("CreateReleaseTag")
 
     git_version = GitVersion(git_version_settings);
 
-    Information($"Tag current commit with value {tag}");
+    Information($"Add tag {tag} in commit {git_version.Sha}");
 });
 
 Task("PushReleaseTag")
@@ -300,12 +301,12 @@ Task("PushReleaseTag")
     .WithCriteria(!string.IsNullOrWhiteSpace(gh_token))
     .Does(() =>
 {
-    var tag = $"v{git_version.SemVer}";
+    var tag = GetTag();
 
     // Push a tag to GitHub with token authentication
     GitPushRef(@"./", gh_token, "", "origin", tag);
 
-    Information($"Push tag {tag} to remote repository");
+    Information($"Push tag {tag} to remote repository, from commit {git_version.Sha}");
 });
 
 Task("CheckCurrentCommitTag")
@@ -514,7 +515,7 @@ Task("CreateGitHubRelease")
 {
     GitReleaseManagerCreate(gh_token, gh_owner, gh_repo, new GitReleaseManagerCreateSettings {
         //Milestone         = gitVersion.SemVer,
-        Name              = $"v{git_version.SemVer}",
+        Name              = GetTag(),
         InputFilePath     = "./RELEASENOTES.md",
         Prerelease        = !string.IsNullOrWhiteSpace(git_version.PreReleaseTag),
         TargetCommitish   = git_version.BranchName,
@@ -564,7 +565,7 @@ Task("AttachGitHubReleaseArtifacts")
 {
     var globalReleaseNotesFile = MakeAbsolute(File("./GLOBALRELEASENOTES.md")).FullPath;
     release_files += $",{globalReleaseNotesFile}";
-    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, $"v{git_version.SemVer}", release_files,
+    GitReleaseManagerAddAssets(gh_token, gh_owner, gh_repo, GetTag(), release_files,
         new GitReleaseManagerAddAssetsSettings {
             WorkingDirectory  = $"{artifacts}/releases",
             ToolTimeout       = tool_timeout,
