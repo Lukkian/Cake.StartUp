@@ -354,7 +354,7 @@ Task("Build")
     {
       // Use MSBuild
       MSBuild(solution_path, settings =>
-        settings.SetConfiguration(configuration)
+        settings.SetConfiguration(configuration).UseToolVersion(MSBuildToolVersion.VS2019)
         .SetVerbosity(Verbosity.Minimal));
     }
     else
